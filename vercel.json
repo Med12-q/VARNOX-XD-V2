@@ -1,21 +1,19 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "web.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/web.js"
-    }
-  ],
+  "installCommand": "npm install --legacy-peer-deps",
   "functions": {
-    "web.js": {
+    "api/code.js": {
       "maxDuration": 60,
       "memory": 1024
+    },
+    "api/health.js": {
+      "maxDuration": 10,
+      "memory": 256
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/code", "destination": "/api/code" },
+    { "source": "/health", "destination": "/api/health" },
+    { "source": "/((?!api/).*)", "destination": "/public/index.html" }
+  ]
 }
