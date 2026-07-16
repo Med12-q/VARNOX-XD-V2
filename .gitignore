@@ -2,6 +2,11 @@ node_modules/
 session/
 sessions/
 temp/
+tmp/
 *.log
 .env
+.env.local
+.DS_Store
 *.bak
+auth_info_baileys/
+auth_info/

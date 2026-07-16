@@ -1,7 +1,7 @@
 /**
  * 𝗩𝗔𝗥𝗡𝗢𝗫 𝗫𝗗 𝗩2 - Web Pairing Panel
  * Professional WhatsApp Bot Pairing Server
- * Deploy on Render → Get your pairing link
+ * Deploy on Vercel → Get your pairing link instantly
  */
 
 require('dotenv').config();
@@ -22,7 +22,9 @@ const pino = require('pino');
 const NodeCache = require('node-cache');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+
+// Use /tmp for Vercel (serverless read-only filesystem, /tmp is writable)
+const TMP_DIR = process.env.VERCEL ? '/tmp' : path.join(__dirname, 'sessions');
 
 // Middleware
 app.use(cors());
@@ -30,23 +32,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// In-memory session map for pairing sockets
-const pairingInstances = new Map();
-
-// Clean up sessions after 10 minutes
-setInterval(() => {
-    const now = Date.now();
-    for (const [id, instance] of pairingInstances.entries()) {
-        if (now - instance.created > 10 * 60 * 1000) {
-            try { instance.sock.end(); } catch {}
-            pairingInstances.delete(id);
-        }
-    }
-}, 60 * 1000);
-
 // API: Generate pairing code
 app.get('/code', async (req, res) => {
     let { number } = req.query;
+
     if (!number) {
         return res.json({ error: true, message: 'Numéro requis' });
     }
@@ -55,20 +44,16 @@ app.get('/code', async (req, res) => {
     number = number.replace(/[^0-9]/g, '');
 
     if (number.length < 7 || number.length > 15) {
-        return res.json({ error: true, message: 'Numéro invalide' });
+        return res.json({ error: true, message: 'Numéro invalide (7-15 chiffres)' });
     }
 
-    // Check if already active
-    if (pairingInstances.has(number)) {
-        const inst = pairingInstances.get(number);
-        if (inst.code) {
-            return res.json({ code: inst.code });
-        }
-    }
+    const sessionDir = path.join(TMP_DIR, `pair_${number}`);
 
     try {
-        const sessionDir = path.join(__dirname, 'sessions', `pair_${number}`);
-        if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
+        // Ensure session directory exists
+        if (!fs.existsSync(sessionDir)) {
+            fs.mkdirSync(sessionDir, { recursive: true });
+        }
 
         const { version } = await fetchLatestBaileysVersion();
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
@@ -86,111 +71,108 @@ app.get('/code', async (req, res) => {
             msgRetryCounterCache,
         });
 
-        const instance = { sock, created: Date.now(), code: null };
-        pairingInstances.set(number, instance);
-
         sock.ev.on('creds.update', saveCreds);
 
-        // Wait for connection then request pairing code
-        await new Promise((resolve, reject) => {
+        // Wait for connection and pairing code
+        const code = await new Promise((resolve, reject) => {
             let done = false;
 
             const timeout = setTimeout(() => {
                 if (!done) {
                     done = true;
-                    reject(new Error('Timeout: impossible de se connecter à WhatsApp'));
+                    try { sock.end(); } catch {}
+                    reject(new Error('Timeout: impossible de se connecter à WhatsApp (30s)'));
                 }
             }, 30000);
 
             sock.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect } = update;
 
-                if (connection === 'open' && !done) {
-                    done = true;
-                    clearTimeout(timeout);
-                    resolve();
-                }
-
                 if (connection === 'close') {
                     const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-                    if (!done) {
-                        if (reason !== DisconnectReason.loggedOut) {
-                            // Retry logic handled by pairing request below
-                        } else {
-                            done = true;
-                            clearTimeout(timeout);
-                            reject(new Error('Session expirée'));
-                        }
+                    if (reason === DisconnectReason.loggedOut && !done) {
+                        done = true;
+                        clearTimeout(timeout);
+                        reject(new Error('Session expirée. Réessayez.'));
                     }
                 }
             });
 
-            // Request pairing code after 2 seconds
+            // Request pairing code after 2.5s (wait for socket to initialize)
             setTimeout(async () => {
                 try {
                     if (!sock.authState.creds.registered) {
-                        const code = await sock.requestPairingCode(number);
-                        const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
-                        instance.code = formatted;
+                        const pairingCode = await sock.requestPairingCode(number);
+                        const formatted = pairingCode?.match(/.{1,4}/g)?.join('-') || pairingCode;
                         if (!done) {
                             done = true;
                             clearTimeout(timeout);
-                            resolve();
+                            resolve(formatted);
                         }
                     } else {
                         if (!done) {
                             done = true;
                             clearTimeout(timeout);
-                            resolve();
+                            resolve(null); // Already registered
                         }
                     }
                 } catch (err) {
                     if (!done) {
                         done = true;
                         clearTimeout(timeout);
+                        try { sock.end(); } catch {}
                         reject(err);
                     }
                 }
             }, 2500);
         });
 
-        if (instance.code) {
-            return res.json({ code: instance.code });
+        // Clean up session after getting code (free /tmp space)
+        try {
+            sock.end();
+            setTimeout(() => {
+                try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+            }, 5000);
+        } catch {}
+
+        if (code) {
+            return res.json({ code });
         } else {
-            return res.json({ error: true, message: 'Déjà connecté. Session active.' });
+            return res.json({ error: true, message: 'Numéro déjà connecté. Réessayez avec un autre numéro.' });
         }
 
     } catch (err) {
         console.error('Pairing error:', err.message);
-        // Clean up
-        if (pairingInstances.has(number)) {
-            try { pairingInstances.get(number).sock.end(); } catch {}
-            pairingInstances.delete(number);
-        }
+        // Clean up on error
+        try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch {}
         return res.json({ error: true, message: err.message || 'Erreur lors de la génération du code' });
     }
 });
 
 // API: Health check
 app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'online', 
+    res.json({
+        status: 'online',
         bot: '𝗩𝗔𝗥𝗡𝗢𝗫 𝗫𝗗 𝗩2',
         version: '2.0.0',
+        platform: process.env.VERCEL ? 'Vercel' : 'Local',
         uptime: process.uptime()
     });
 });
 
-// Serve pairing page for all routes
+// Serve pairing page for all other routes
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`\n🌐 𝗩𝗔𝗥𝗡𝗢𝗫 𝗫𝗗 𝗩2 — Web Panel`);
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🔗 Open: http://localhost:${PORT}\n`);
-});
+// Only start server when running directly (not on Vercel serverless)
+if (require.main === module) {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log(`\n🌐 𝗩𝗔𝗥𝗡𝗢𝗫 𝗫𝗗 𝗩2 — Web Panel`);
+        console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+        console.log(`🔗 Ouvrez: http://localhost:${PORT}\n`);
+    });
+}
 
 module.exports = app;
