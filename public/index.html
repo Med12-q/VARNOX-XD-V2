@@ -808,7 +808,7 @@
       <div class="feature-card">
         <span class="feature-icon">⚡</span>
         <div class="feature-name">ULTRA PERFORMANT</div>
-        <div class="feature-desc">Optimisé pour Render et panels 24/7, auto-restart, gestion mémoire avancée</div>
+        <div class="feature-desc">Optimisé pour Vercel et panels 24/7, auto-restart, gestion mémoire avancée</div>
       </div>
       <div class="feature-card">
         <span class="feature-icon">🔧</span>
@@ -934,27 +934,49 @@
       return;
     }
 
-    // Reset
+    // Reset UI
     resultBox.className = 'result-box';
     btn.disabled = true;
     btn.textContent = '⏳ GÉNÉRATION EN COURS...';
     loading.className = 'loading show';
 
     try {
-      const res = await fetch(`/code?number=${encodeURIComponent(phone)}`);
-      const data = await res.json();
+      // 35-second fetch timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 35000);
+
+      const res = await fetch(`/code?number=${encodeURIComponent(phone)}`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
 
       loading.className = 'loading';
+
+      // Guard against non-JSON Vercel error pages (500, 404, etc.)
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        showError(`❌ Erreur serveur HTTP ${res.status} — Redéployez ou réessayez.`);
+        btn.disabled = false;
+        btn.textContent = '⚡ GÉNÉRER LE CODE';
+        return;
+      }
+
+      const data = await res.json();
 
       if (data.code && !data.error) {
         document.getElementById('resultCode').textContent = data.code;
         resultBox.className = 'result-box show';
       } else {
-        showError(data.message || 'Erreur lors de la génération du code. Réessayez.');
+        showError('❌ ' + (data.message || 'Erreur lors de la génération. Réessayez.'));
       }
+
     } catch (err) {
       loading.className = 'loading';
-      showError('❌ Connexion impossible au serveur. Vérifiez votre connexion.');
+      if (err.name === 'AbortError') {
+        showError('⏱️ Timeout 35s — WhatsApp ne répond pas. Vérifiez le numéro et réessayez.');
+      } else {
+        showError('❌ ' + (err.message || 'Erreur réseau. Réessayez.'));
+      }
     }
 
     btn.disabled = false;

@@ -3,41 +3,46 @@
  * Vercel Serverless Function: /api/code?number=XXXX
  */
 
-const fs = require('fs');
-const path = require('path');
-const { Boom } = require('@hapi/boom');
-const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    DisconnectReason,
-    fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore,
-    Browsers,
-} = require('@whiskeysockets/baileys');
-const pino = require('pino');
-const NodeCache = require('node-cache');
+// Hard-coded WA version — avoids fetchLatestBaileysVersion() network call which fails on Vercel
+const WA_VERSION = [2, 3000, 1023097280];
 
 module.exports = async (req, res) => {
-    // CORS headers
+    // Always respond with JSON, even on crash
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Content-Type', 'application/json');
 
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
+    if (req.method === 'OPTIONS') return res.status(200).end();
 
     let { number } = req.query;
+    if (!number) return res.status(400).json({ error: true, message: 'Numéro requis' });
 
-    if (!number) {
-        return res.json({ error: true, message: 'Numéro requis' });
+    number = number.replace(/[^0-9]/g, '');
+    if (number.length < 7 || number.length > 15) {
+        return res.status(400).json({ error: true, message: 'Numéro invalide (7 à 15 chiffres)' });
     }
 
-    // Digits only
-    number = number.replace(/[^0-9]/g, '');
+    // Lazy-load Baileys inside the handler so import errors return JSON, not a 500 HTML page
+    let makeWASocket, useMultiFileAuthState, DisconnectReason,
+        makeCacheableSignalKeyStore, Browsers, Boom, pino, NodeCache, fs;
 
-    if (number.length < 7 || number.length > 15) {
-        return res.json({ error: true, message: 'Numéro invalide (7 à 15 chiffres)' });
+    try {
+        const baileys = require('@whiskeysockets/baileys');
+        makeWASocket             = baileys.default;
+        useMultiFileAuthState    = baileys.useMultiFileAuthState;
+        DisconnectReason         = baileys.DisconnectReason;
+        makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore;
+        Browsers                 = baileys.Browsers;
+        Boom                     = require('@hapi/boom').Boom;
+        pino                     = require('pino');
+        NodeCache                = require('node-cache');
+        fs                       = require('fs');
+    } catch (importErr) {
+        console.error('[VARNOX] Import error:', importErr.message);
+        return res.status(500).json({
+            error: true,
+            message: 'Erreur de chargement du module. Réessayez dans quelques secondes.'
+        });
     }
 
     // /tmp is the only writable dir on Vercel
@@ -46,12 +51,11 @@ module.exports = async (req, res) => {
     try {
         fs.mkdirSync(sessionDir, { recursive: true });
 
-        const { version } = await fetchLatestBaileysVersion();
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
         const msgRetryCounterCache = new NodeCache();
 
         const sock = makeWASocket({
-            version,
+            version: WA_VERSION,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
             browser: Browsers.ubuntu('Chrome'),
@@ -60,8 +64,9 @@ module.exports = async (req, res) => {
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
             },
             msgRetryCounterCache,
-            connectTimeoutMs: 25000,
-            defaultQueryTimeoutMs: 20000,
+            connectTimeoutMs: 20000,
+            defaultQueryTimeoutMs: 15000,
+            keepAliveIntervalMs: 5000,
         });
 
         sock.ev.on('creds.update', saveCreds);
@@ -69,71 +74,56 @@ module.exports = async (req, res) => {
         const code = await new Promise((resolve, reject) => {
             let done = false;
 
-            // 28s hard timeout (Vercel hobby = 60s max, we're safe)
-            const timeout = setTimeout(() => {
-                if (!done) {
-                    done = true;
-                    try { sock.end(); } catch (_) {}
-                    reject(new Error('Timeout: impossible de joindre WhatsApp. Réessayez.'));
-                }
-            }, 28000);
+            const finish = (fn) => (...args) => {
+                if (done) return;
+                done = true;
+                clearTimeout(hardTimeout);
+                fn(...args);
+            };
 
-            // Request pairing code 2.5s after socket init
+            // 25s hard timeout — well within Vercel's 60s limit
+            const hardTimeout = setTimeout(finish(reject), 25000,
+                new Error('Timeout WhatsApp (25s). Vérifiez votre numéro et réessayez.'));
+
+            // Request code after socket initialises (~2.5s)
             setTimeout(async () => {
                 try {
-                    if (!sock.authState.creds.registered) {
-                        const pairingCode = await sock.requestPairingCode(number);
-                        const formatted = pairingCode?.match(/.{1,4}/g)?.join('-') || pairingCode;
-                        if (!done) {
-                            done = true;
-                            clearTimeout(timeout);
-                            resolve(formatted);
-                        }
-                    } else {
-                        if (!done) {
-                            done = true;
-                            clearTimeout(timeout);
-                            resolve(null);
-                        }
+                    if (sock.authState.creds.registered) {
+                        return finish(reject)(new Error('Ce numéro est déjà enregistré.'));
                     }
+                    const raw = await sock.requestPairingCode(number);
+                    const formatted = raw?.match(/.{1,4}/g)?.join('-') ?? raw;
+                    finish(resolve)(formatted);
                 } catch (err) {
-                    if (!done) {
-                        done = true;
-                        clearTimeout(timeout);
-                        try { sock.end(); } catch (_) {}
-                        reject(err);
-                    }
+                    finish(reject)(err);
                 }
             }, 2500);
 
             sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
                 if (connection === 'close') {
-                    const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-                    if (reason === DisconnectReason.loggedOut && !done) {
-                        done = true;
-                        clearTimeout(timeout);
-                        reject(new Error('Session expirée. Réessayez.'));
+                    const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
+                    if (statusCode === DisconnectReason.loggedOut) {
+                        finish(reject)(new Error('Session expirée. Réessayez.'));
                     }
+                    // Other close reasons: socket auto-reconnects; let the 2.5s timer handle it
                 }
             });
         });
 
-        // Cleanup
+        // Non-blocking cleanup
         try { sock.end(); } catch (_) {}
         setTimeout(() => {
             try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (_) {}
         }, 3000);
 
-        if (code) {
-            return res.json({ code });
-        } else {
-            return res.json({ error: true, message: 'Ce numéro est déjà lié à un autre appareil.' });
-        }
+        return res.status(200).json({ code });
 
     } catch (err) {
-        // Cleanup on error
         try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (_) {}
         console.error('[VARNOX] Pairing error:', err.message);
-        return res.json({ error: true, message: err.message || 'Erreur interne. Réessayez.' });
+        return res.status(200).json({
+            error: true,
+            message: err.message || 'Erreur interne. Réessayez.'
+        });
     }
 };

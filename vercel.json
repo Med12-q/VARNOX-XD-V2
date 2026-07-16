@@ -12,8 +12,8 @@
     }
   },
   "rewrites": [
-    { "source": "/code", "destination": "/api/code" },
+    { "source": "/code",   "destination": "/api/code"   },
     { "source": "/health", "destination": "/api/health" },
-    { "source": "/((?!api/).*)", "destination": "/public/index.html" }
+    { "source": "/(.*)",   "destination": "/index.html" }
   ]
 }
