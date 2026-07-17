@@ -20,6 +20,12 @@ const settings = {
 
   // Ton lien GitHub (optionnel)
   updateZipUrl: "https://github.com/Med12-q/VARNOX-XD-V2",
+
+  // URL du panneau Vercel (utilisé par la commande .pair pour générer les codes)
+  // Remplace par ton URL Vercel réelle : https://varnox-xd-v2.vercel.app
+  pairApiUrl: process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "https://varnox-xd-v2.vercel.app",
 };
 
 module.exports = settings;

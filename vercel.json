@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "echo 'Build OK'",
   "installCommand": "npm install --legacy-peer-deps",
   "functions": {
     "api/code.js": {

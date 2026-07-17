@@ -1,11 +1,16 @@
 const axios = require('axios');
 const { sleep } = require('../lib/myfunc');
+const settings = require('../settings');
 
+/**
+ * Commande .pair — Génère un code de jumelage WhatsApp
+ * Utilise l'API /code du panneau web VARNOX XD V2
+ */
 async function pairCommand(sock, chatId, message, q) {
     try {
         if (!q) {
             return await sock.sendMessage(chatId, {
-                text: "Please provide valid WhatsApp number\nExample: .pair 224XXXXXXX",
+                text: `📱 *VARNOX XD V2 — Pair Code*\n\nUtilisation: *.pair <numéro>*\nExemple: *.pair 224610835573*\n\nOu visite le panneau web:\n${settings.pairApiUrl}`,
                 contextInfo: {
                     forwardingScore: 1,
                     isForwarded: true,
@@ -24,7 +29,7 @@ async function pairCommand(sock, chatId, message, q) {
 
         if (numbers.length === 0) {
             return await sock.sendMessage(chatId, {
-                text: "Invalid number❌️ Please use the correct format!",
+                text: '❌ Numéro invalide. Format: *.pair 224610835573*',
                 contextInfo: {
                     forwardingScore: 1,
                     isForwarded: true,
@@ -38,12 +43,13 @@ async function pairCommand(sock, chatId, message, q) {
         }
 
         for (const number of numbers) {
+            // Vérifier que le numéro est sur WhatsApp
             const whatsappID = number + '@s.whatsapp.net';
-            const result = await sock.onWhatsApp(whatsappID);
+            const result = await sock.onWhatsApp(whatsappID).catch(() => []);
 
             if (!result[0]?.exists) {
-                return await sock.sendMessage(chatId, {
-                    text: `That number is not registered on WhatsApp❗️`,
+                await sock.sendMessage(chatId, {
+                    text: `❌ Le numéro *${number}* n'est pas enregistré sur WhatsApp.`,
                     contextInfo: {
                         forwardingScore: 1,
                         isForwarded: true,
@@ -54,10 +60,11 @@ async function pairCommand(sock, chatId, message, q) {
                         }
                     }
                 });
+                continue;
             }
 
             await sock.sendMessage(chatId, {
-                text: "Wait a moment for the code",
+                text: `⏳ Génération du code pour *${number}*...\nPatientez ~10 secondes.`,
                 contextInfo: {
                     forwardingScore: 1,
                     isForwarded: true,
@@ -70,17 +77,15 @@ async function pairCommand(sock, chatId, message, q) {
             });
 
             try {
-                const response = await axios.get(`https://knight-bot-paircode.onrender.com/code?number=${number}`);
-                
-                if (response.data && response.data.code) {
+                // Appel à notre propre API Vercel (plus fiable qu'un service tiers)
+                const apiUrl = `${settings.pairApiUrl}/code?number=${number}`;
+                const response = await axios.get(apiUrl, { timeout: 35000 });
+
+                if (response.data?.code && !response.data?.error) {
                     const code = response.data.code;
-                    if (code === "Service Unavailable") {
-                        throw new Error('Service Unavailable');
-                    }
-                    
-                    await sleep(5000);
+                    await sleep(2000);
                     await sock.sendMessage(chatId, {
-                        text: `Your pairing code: ${code}`,
+                        text: `✅ *Code de jumelage WhatsApp*\n\n🔑 Code: *${code}*\n\n📱 Comment utiliser:\n1. Ouvre WhatsApp\n2. Paramètres → Appareils connectés\n3. Lier un appareil → Lier avec numéro de téléphone\n4. Entre le code ci-dessus\n\n⚠️ Le code expire en quelques minutes.`,
                         contextInfo: {
                             forwardingScore: 1,
                             isForwarded: true,
@@ -92,16 +97,12 @@ async function pairCommand(sock, chatId, message, q) {
                         }
                     });
                 } else {
-                    throw new Error('Invalid response from server');
+                    throw new Error(response.data?.message || 'Réponse invalide');
                 }
             } catch (apiError) {
-                console.error('API Error:', apiError);
-                const errorMessage = apiError.message === 'Service Unavailable' 
-                    ? "Service is currently unavailable. Réessayez plus tard."
-                    : "Failed to generate pairing code. Réessayez plus tard.";
-                
+                console.error('[pair.js] Erreur API:', apiError.message);
                 await sock.sendMessage(chatId, {
-                    text: errorMessage,
+                    text: `❌ Impossible de générer le code: ${apiError.message}\n\nEssaie directement sur:\n${settings.pairApiUrl}`,
                     contextInfo: {
                         forwardingScore: 1,
                         isForwarded: true,
@@ -115,9 +116,9 @@ async function pairCommand(sock, chatId, message, q) {
             }
         }
     } catch (error) {
-        console.error(error);
+        console.error('[pair.js] Erreur générale:', error);
         await sock.sendMessage(chatId, {
-            text: "Une erreur s'est produite. Réessayez plus tard.",
+            text: "❌ Une erreur s'est produite. Réessayez ou visite: " + settings.pairApiUrl,
             contextInfo: {
                 forwardingScore: 1,
                 isForwarded: true,
@@ -131,4 +132,4 @@ async function pairCommand(sock, chatId, message, q) {
     }
 }
 
-module.exports = pairCommand; 
+module.exports = pairCommand;
