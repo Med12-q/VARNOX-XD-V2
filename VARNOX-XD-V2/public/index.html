@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VARNOX XD V2 — Web Pairing</title>
+  <meta name="description" content="Connectez votre WhatsApp à VARNOX XD V2"/>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+  <style>
+    /* ══════════════════════════════════════
+       ROOT — BLACK + RED + NEON BLUE
+    ══════════════════════════════════════ */
+    :root {
+      --black:       #000000;
+      --black2:      #0a0a0a;
+      --black3:      #111111;
+      --black4:      #161616;
+      --black5:      #1c1c1c;
+      --red:         #ff0033;
+      --red-dim:     rgba(255, 0, 51, 0.7);
+      --red-glow:    rgba(255, 0, 51, 0.25);
+      --red-soft:    rgba(255, 0, 51, 0.08);
+      --blue:        #00b4ff;
+      --blue-dim:    rgba(0, 180, 255, 0.7);
+      --blue-glow:   rgba(0, 180, 255, 0.25);
+      --blue-soft:   rgba(0, 180, 255, 0.08);
+      --white:       #ffffff;
+      --white2:      rgba(255,255,255,0.85);
+      --white3:      rgba(255,255,255,0.5);
+      --white4:      rgba(255,255,255,0.2);
+      --border:      rgba(255,255,255,0.08);
+      --border-red:  rgba(255, 0, 51, 0.2);
+      --border-blue: rgba(0, 180, 255, 0.2);
+      --card:        rgba(255,255,255,0.03);
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--black);
+      color: var(--white);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── BACKGROUND ── */
+    .bg-layer {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 0%, rgba(255,0,51,0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 100%, rgba(0,180,255,0.07) 0%, transparent 60%);
+    }
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    /* ── MAIN WRAPPER ── */
+    .app {
+      position: relative; z-index: 10;
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0 16px 60px;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      text-align: center;
+      padding: 48px 0 36px;
+      width: 100%;
+    }
+
+    .logo-ring {
+      width: 90px; height: 90px;
+      background: linear-gradient(135deg, var(--red), var(--blue));
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2.4rem;
+      margin: 0 auto 20px;
+      box-shadow: 0 0 0 6px rgba(255,0,51,0.12), 0 0 40px rgba(255,0,51,0.25);
+      animation: logo-pulse 3s ease-in-out infinite;
+    }
+    @keyframes logo-pulse {
+      0%,100% { box-shadow: 0 0 0 6px rgba(255,0,51,0.12), 0 0 40px rgba(255,0,51,0.2); }
+      50%      { box-shadow: 0 0 0 10px rgba(255,0,51,0.08), 0 0 60px rgba(255,0,51,0.35), 0 0 20px rgba(0,180,255,0.2); }
+    }
+
+    .brand-name {
+      font-size: 2rem; font-weight: 900;
+      letter-spacing: 4px;
+      background: linear-gradient(135deg, var(--red) 30%, var(--blue) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .brand-sub {
+      font-size: 0.95rem; font-weight: 400;
+      color: var(--white3);
+      letter-spacing: 1px;
+    }
+
+    /* ── MAIN CARD ── */
+    .main-card {
+      width: 100%; max-width: 480px;
+      background: var(--black3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    /* ── SERVER LIST SECTION ── */
+    .server-section {
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      max-height: 320px;
+      overflow-y: auto;
+    }
+    .server-section::-webkit-scrollbar { width: 4px; }
+    .server-section::-webkit-scrollbar-track { background: transparent; }
+    .server-section::-webkit-scrollbar-thumb { background: var(--border-red); border-radius: 4px; }
+
+    .server-item {
+      display: flex; align-items: center;
+      padding: 12px 14px;
+      border-radius: 12px;
+      margin-bottom: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+      gap: 12px;
+      position: relative;
+    }
+    .server-item:last-child { margin-bottom: 0; }
+    .server-item:hover {
+      background: var(--card);
+      border-color: var(--border-red);
+    }
+    .server-item.selected {
+      background: rgba(255,0,51,0.06);
+      border-color: var(--red);
+    }
+
+    .server-icon {
+      width: 38px; height: 38px; flex-shrink: 0;
+      background: var(--black5);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+    }
+    .server-item.selected .server-icon {
+      border-color: var(--red);
+      background: rgba(255,0,51,0.08);
+    }
+
+    .server-info { flex: 1; min-width: 0; }
+    .server-name {
+      font-size: 0.9rem; font-weight: 700;
+      color: var(--white2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .server-item.selected .server-name { color: var(--white); }
+    .server-stats {
+      display: flex; align-items: center; gap: 14px;
+      margin-top: 3px;
+    }
+    .server-stat {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 0.75rem; color: var(--white3);
+    }
+    .stat-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e;
+      flex-shrink: 0;
+    }
+    .stat-dot.full { background: var(--red); box-shadow: 0 0 6px var(--red); }
+    .stat-icon { font-size: 0.7rem; }
+
+    .server-badge {
+      flex-shrink: 0;
+    }
+    .select-btn {
+      padding: 6px 14px;
+      background: var(--black5);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--white3);
+      font-size: 0.78rem; font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .server-item.selected .select-btn {
+      background: var(--red);
+      border-color: var(--red);
+      color: var(--white);
+      box-shadow: 0 0 12px rgba(255,0,51,0.3);
+    }
+    .server-item:not(.selected):hover .select-btn {
+      border-color: var(--border-red);
+      color: var(--white2);
+    }
+
+    /* ── LIMIT BAR ── */
+    .limit-bar-wrap {
+      margin-top: 5px;
+      width: 100%;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .limit-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--red), var(--blue));
+      transition: width 0.5s;
+    }
+
+    /* ── INFO BOX ── */
+    .info-box {
+      margin: 12px;
+      padding: 14px 16px;
+      background: rgba(0,180,255,0.06);
+      border: 1px solid rgba(0,180,255,0.2);
+      border-radius: 12px;
+      display: flex; align-items: flex-start; gap: 12px;
+    }
+    .info-icon {
+      width: 28px; height: 28px; flex-shrink: 0;
+      background: var(--blue);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem; font-weight: 800;
+      color: var(--black);
+    }
+    .info-content {}
+    .info-title {
+      font-size: 0.88rem; font-weight: 700;
+      color: var(--white2);
+      margin-bottom: 3px;
+    }
+    .info-text {
+      font-size: 0.78rem; color: var(--white3);
+      line-height: 1.5;
+    }
+
+    /* ── FORM SECTION ── */
+    .form-section {
+      padding: 16px 16px 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.82rem; font-weight: 600;
+      color: var(--white2);
+      margin-bottom: 8px;
+    }
+
+    .phone-wrap {
+      display: flex; align-items: center;
+      background: var(--black4);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.25s;
+      margin-bottom: 8px;
+    }
+    .phone-wrap:focus-within {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(0,180,255,0.1);
+    }
+    .phone-prefix {
+      padding: 0 14px;
+      height: 52px;
+      display: flex; align-items: center;
+      border-right: 1px solid var(--border);
+      color: var(--white3);
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+    .phone-input {
+      flex: 1;
+      background: transparent;
+      border: none; outline: none;
+      color: var(--white);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 1rem;
+      padding: 0 16px;
+      height: 52px;
+    }
+    .phone-input::placeholder { color: var(--white4); }
+
+    .phone-hint {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.73rem; color: var(--white3);
+      margin-bottom: 16px;
+      padding: 0 4px;
+    }
+    .phone-hint::before {
+      content: '💡';
+      font-size: 0.78rem;
+    }
+
+    /* ── GENERATE BUTTON ── */
+    .btn-generate {
+      width: 100%;
+      height: 54px;
+      background: linear-gradient(135deg, var(--red) 0%, #ff4466 50%, #cc0033 100%);
+      border: none; border-radius: 12px;
+      color: var(--white);
+      font-family: 'Inter', sans-serif;
+      font-size: 1rem; font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all 0.25s;
+      box-shadow: 0 4px 20px rgba(255,0,51,0.3);
+    }
+    .btn-generate:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 28px rgba(255,0,51,0.45);
+    }
+    .btn-generate:active:not(:disabled) {
+      transform: translateY(0);
+      box-shadow: 0 2px 12px rgba(255,0,51,0.25);
+    }
+    .btn-generate:disabled {
+      opacity: 0.55; cursor: not-allowed; transform: none;
+    }
+
+    /* ── LOADING ── */
+    .loading-box {
+      display: none;
+      text-align: center; padding: 20px;
+    }
+    .loading-box.show { display: block; }
+    .spin-ring {
+      width: 44px; height: 44px;
+      border: 3px solid rgba(255,0,51,0.15);
+      border-top-color: var(--red);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-txt {
+      font-size: 0.82rem; color: var(--white3);
+      letter-spacing: 1px;
+      animation: blink 1.4s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+    /* ── RESULT BOX ── */
+    .result-box {
+      display: none;
+      margin-top: 14px;
+      background: var(--black4);
+      border: 1px solid rgba(0,180,255,0.3);
+      border-radius: 12px;
+      overflow: hidden;
+      animation: pop-in 0.35s cubic-bezier(.34,1.56,.64,1);
+    }
+    .result-box.show { display: block; }
+    .result-box.error-box {
+      border-color: rgba(255,0,51,0.35);
+    }
+    @keyframes pop-in {
+      from { opacity:0; transform: scale(0.92) translateY(8px); }
+      to   { opacity:1; transform: scale(1) translateY(0); }
+    }
+    .result-inner {
+      padding: 18px 18px 14px;
+      text-align: center;
+    }
+    .result-check {
+      display: flex; align-items: center; justify-content: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .check-icon {
+      width: 28px; height: 28px;
+      background: var(--blue);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem;
+      color: var(--black);
+      font-weight: 800;
+      box-shadow: 0 0 14px rgba(0,180,255,0.4);
+      flex-shrink: 0;
+    }
+    .result-code {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 1.9rem; font-weight: 700;
+      letter-spacing: 6px;
+      background: linear-gradient(135deg, var(--blue), #66d4ff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      text-shadow: none;
+      animation: code-glow 2s ease-in-out infinite;
+    }
+    @keyframes code-glow {
+      0%,100% { filter: drop-shadow(0 0 6px rgba(0,180,255,0.5)); }
+      50%      { filter: drop-shadow(0 0 14px rgba(0,180,255,0.8)); }
+    }
+    .error-msg {
+      font-size: 0.9rem; color: var(--red);
+      padding: 10px;
+    }
+
+    /* WA Steps shown after code */
+    .wa-steps {
+      border-top: 1px solid var(--border);
+      padding: 14px 16px;
+    }
+    .wa-steps-title {
+      font-size: 0.75rem; font-weight: 600;
+      color: var(--white3); text-transform: uppercase;
+      letter-spacing: 1px; margin-bottom: 10px;
+    }
+    .wa-step {
+      display: flex; align-items: flex-start; gap: 10px;
+      margin-bottom: 7px;
+      font-size: 0.8rem; color: var(--white3);
+      line-height: 1.45;
+    }
+    .wa-step:last-child { margin-bottom: 0; }
+    .wa-step-num {
+      min-width: 18px; height: 18px;
+      background: rgba(0,180,255,0.15);
+      border: 1px solid rgba(0,180,255,0.3);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; font-weight: 700;
+      color: var(--blue);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .wa-step strong { color: var(--white2); }
+
+    /* Countdown */
+    .countdown-bar {
+      border-top: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .cd-label { font-size: 0.73rem; color: var(--white3); }
+    .cd-timer {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.88rem; font-weight: 700;
+      color: var(--blue);
+    }
+    .cd-timer.urgent { color: var(--red); }
+
+    /* Copy btn */
+    .btn-copy {
+      width: 100%;
+      height: 46px;
+      background: var(--black5);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--white2);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.88rem; font-weight: 600;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all 0.2s;
+      margin: 12px 16px 16px;
+      width: calc(100% - 32px);
+    }
+    .btn-copy:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: var(--white4);
+    }
+    .btn-copy.copied {
+      border-color: #22c55e;
+      color: #22c55e;
+    }
+
+    /* ── SELECTED DISPLAY ── */
+    .selected-server-display {
+      margin: 12px 16px 0;
+      padding: 10px 14px;
+      background: rgba(255,0,51,0.05);
+      border: 1px solid rgba(255,0,51,0.2);
+      border-radius: 10px;
+      display: none;
+      align-items: center; justify-content: space-between;
+      font-size: 0.82rem;
+    }
+    .selected-server-display.show { display: flex; }
+    .sel-name {
+      font-weight: 700; color: var(--white2);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .sel-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #22c55e; box-shadow: 0 0 6px #22c55e;
+    }
+    .sel-limit {
+      font-size: 0.75rem; color: var(--white3);
+    }
+
+    /* ── FOOTER ── */
+    .footer {
+      margin-top: 28px;
+      text-align: center;
+      color: var(--white3);
+      font-size: 0.78rem;
+    }
+    .footer a {
+      color: var(--blue); text-decoration: none;
+    }
+    .footer a:hover { text-decoration: underline; }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-red); border-radius: 3px; }
+
+    /* ── MOBILE ── */
+    @media(max-width:520px) {
+      .brand-name { font-size: 1.6rem; }
+      .result-code { font-size: 1.5rem; letter-spacing: 4px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-layer"></div>
+<div class="bg-grid"></div>
+
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo-ring">⚡</div>
+    <div class="brand-name">VARNOX XD V2</div>
+    <div class="brand-sub">Generate Your Pairing Code</div>
+  </div>
+
+  <!-- Main Card -->
+  <div class="main-card">
+
+    <!-- Server List -->
+    <div class="server-section" id="serverList">
+      <!-- Populated by JS -->
+    </div>
+
+    <!-- Selected server display -->
+    <div class="selected-server-display" id="selDisplay">
+      <div class="sel-name">
+        <div class="sel-dot"></div>
+        <span id="selName">Aucun serveur</span>
+      </div>
+      <div class="sel-limit" id="selLimit">0/50</div>
+    </div>
+
+    <!-- Info Box -->
+    <div class="info-box">
+      <div class="info-icon">i</div>
+      <div class="info-content">
+        <div class="info-title">Quick Setup</div>
+        <div class="info-text">Sélectionnez un serveur, entrez votre numéro WhatsApp pour générer instantanément un code de parrainage. Aucun déploiement requis !</div>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <div class="form-section">
+      <label class="form-label">WhatsApp Number</label>
+      <div class="phone-wrap">
+        <div class="phone-prefix">📱</div>
+        <input
+          type="tel"
+          class="phone-input"
+          id="phoneInput"
+          placeholder="Ex: 224669288332"
+          maxlength="15"
+          autocomplete="tel"
+        />
+      </div>
+      <div class="phone-hint">Include country code (e.g., 224 for Guinea, 212 for Morocco)</div>
+
+      <button class="btn-generate" id="generateBtn" onclick="generateCode()">
+        🔑 Generate Pair Code
+      </button>
+
+      <!-- Loading -->
+      <div class="loading-box" id="loadingBox">
+        <div class="spin-ring"></div>
+        <div class="loading-txt">CONNECTING TO WHATSAPP...</div>
+      </div>
+
+      <!-- Result -->
+      <div class="result-box" id="resultBox">
+        <!-- success -->
+        <div class="result-inner" id="resultInner"></div>
+        <div class="wa-steps" id="waSteps" style="display:none">
+          <div class="wa-steps-title">📲 Comment entrer le code</div>
+          <div class="wa-step"><div class="wa-step-num">1</div><span>Ouvrez <strong>WhatsApp</strong> sur votre téléphone</span></div>
+          <div class="wa-step"><div class="wa-step-num">2</div><span>Allez dans <strong>Paramètres → Appareils liés</strong></span></div>
+          <div class="wa-step"><div class="wa-step-num">3</div><span>Appuyez sur <strong>Lier un appareil</strong></span></div>
+          <div class="wa-step"><div class="wa-step-num">4</div><span>Entrez le code ci-dessus — le bot se connecte ✅</span></div>
+        </div>
+        <div class="countdown-bar" id="countdownBar" style="display:none">
+          <span class="cd-label">⏱ Expire dans</span>
+          <span class="cd-timer" id="cdTimer">60s</span>
+        </div>
+        <button class="btn-copy" id="copyBtn" onclick="copyCode()" style="display:none">
+          📋 Copy Code
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /main-card -->
+
+  <!-- Footer -->
+  <div class="footer">
+    © 2026 VARNOX XD V2 | Powered by <a href="https://github.com/Med12-q/VARNOX-XD-V2" target="_blank">Med12-q</a>
+  </div>
+
+</div><!-- /app -->
+
+<script>
+/* ═══════════════════════════════════════════════
+   DATA — 45 servers, limit 50 each
+═══════════════════════════════════════════════ */
+const API_URL = '/code'; // routed via vercel.json → /api/code
+
+// Stable random seeded by server number (looks realistic, same on each visit)
+function seededRand(seed, min, max) {
+  const x = Math.sin(seed * 9301 + 49297) * 233280;
+  const r = x - Math.floor(x);
+  return Math.floor(r * (max - min + 1)) + min;
+}
+
+function buildServers() {
+  const servers = [];
+  for (let i = 1; i <= 45; i++) {
+    const active = seededRand(i * 7, 0, 45);
+    const isFull = active >= 50;
+    servers.push({
+      id: i,
+      name: `Server ${i}`,
+      active: Math.min(active, 50),
+      limit: 50,
+      full: isFull
+    });
+  }
+  return servers;
+}
+
+const SERVERS = buildServers();
+let selectedServer = null;
+let currentCode    = '';
+let cdInterval     = null;
+
+/* ── RENDER SERVER LIST ── */
+function renderServers() {
+  const container = document.getElementById('serverList');
+  container.innerHTML = '';
+  SERVERS.forEach(srv => {
+    const pct = Math.round((srv.active / srv.limit) * 100);
+    const item = document.createElement('div');
+    item.className = 'server-item' + (selectedServer && selectedServer.id === srv.id ? ' selected' : '');
+    item.id = `srv-${srv.id}`;
+    item.innerHTML = `
+      <div class="server-icon">🖥</div>
+      <div class="server-info">
+        <div class="server-name">${srv.name}</div>
+        <div class="server-stats">
+          <div class="server-stat">
+            <div class="stat-dot${srv.full ? ' full' : ''}"></div>
+            Active: ${srv.active}
+          </div>
+          <div class="server-stat">
+            <span class="stat-icon">👥</span>
+            Limit: ${srv.active}/${srv.limit}
+          </div>
+        </div>
+        <div class="limit-bar-wrap">
+          <div class="limit-bar-fill" style="width:${pct}%"></div>
+        </div>
+      </div>
+      <div class="server-badge">
+        <button class="select-btn" onclick="selectServer(${srv.id}, event)">
+          ${selectedServer && selectedServer.id === srv.id ? '✓ Selected' : '∨ Select'}
+        </button>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+function selectServer(id, e) {
+  e && e.stopPropagation();
+  selectedServer = SERVERS.find(s => s.id === id);
+  renderServers();
+
+  // scroll selected into view
+  const el = document.getElementById(`srv-${id}`);
+  if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+  // update display
+  const disp = document.getElementById('selDisplay');
+  disp.classList.add('show');
+  document.getElementById('selName').textContent = selectedServer.name;
+  document.getElementById('selLimit').textContent = `${selectedServer.active}/50`;
+}
+
+/* ── GENERATE CODE ── */
+async function generateCode() {
+  const phone = document.getElementById('phoneInput').value.trim().replace(/\D/g,'');
+
+  if (!selectedServer) {
+    pulse('Sélectionnez d\'abord un serveur !'); return;
+  }
+  if (selectedServer.full) {
+    pulse('Ce serveur est plein (50/50). Choisissez un autre !'); return;
+  }
+  if (!phone || phone.length < 7 || phone.length > 15) {
+    pulse('Entrez un numéro valide avec indicatif pays !'); return;
+  }
+
+  // Show loading
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  document.getElementById('loadingBox').classList.add('show');
+  hideResult();
+
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 58000);
+
+    const resp = await fetch(`${API_URL}?number=${phone}`, {
+      signal: controller.signal
+    });
+    clearTimeout(tid);
+
+    const data = await resp.json();
+
+    if (data.error || !data.code) {
+      showError(data.message || 'Erreur de connexion. Réessayez.');
+    } else {
+      showCode(data.code);
+      incrementActive(selectedServer.id);
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      showError('Timeout (58s). WhatsApp ne répond pas. Vérifiez le numéro et réessayez.');
+    } else {
+      showError('Erreur réseau : ' + (err.message || 'inconnue'));
+    }
+  } finally {
+    document.getElementById('loadingBox').classList.remove('show');
+    btn.disabled = false;
+  }
+}
+
+function showCode(code) {
+  currentCode = code;
+  const box     = document.getElementById('resultBox');
+  const inner   = document.getElementById('resultInner');
+  const waSteps = document.getElementById('waSteps');
+  const cdBar   = document.getElementById('countdownBar');
+  const copyBtn = document.getElementById('copyBtn');
+
+  box.className = 'result-box show';
+  inner.innerHTML = `
+    <div class="result-check">
+      <div class="check-icon">✓</div>
+      <div class="result-code" id="codeText">${code}</div>
+    </div>
+  `;
+  waSteps.style.display = 'block';
+  cdBar.style.display   = 'flex';
+  copyBtn.style.display = 'flex';
+
+  startCountdown(60);
+}
+
+function showError(msg) {
+  currentCode = '';
+  const box   = document.getElementById('resultBox');
+  const inner = document.getElementById('resultInner');
+  document.getElementById('waSteps').style.display = 'none';
+  document.getElementById('countdownBar').style.display = 'none';
+  document.getElementById('copyBtn').style.display = 'none';
+
+  box.className = 'result-box show error-box';
+  inner.innerHTML = `<div class="error-msg">❌ ${msg}</div>`;
+}
+
+function hideResult() {
+  document.getElementById('resultBox').className = 'result-box';
+  if (cdInterval) { clearInterval(cdInterval); cdInterval = null; }
+}
+
+function startCountdown(sec) {
+  if (cdInterval) clearInterval(cdInterval);
+  let t = sec;
+  const el = document.getElementById('cdTimer');
+  const update = () => {
+    if (!el) return;
+    el.textContent = `${t}s`;
+    el.className   = t <= 15 ? 'cd-timer urgent' : 'cd-timer';
+    if (t <= 0) {
+      clearInterval(cdInterval);
+      el.textContent = 'Expiré !';
+    }
+    t--;
+  };
+  update();
+  cdInterval = setInterval(update, 1000);
+}
+
+/* ── COPY ── */
+function copyCode() {
+  if (!currentCode) return;
+  const btn = document.getElementById('copyBtn');
+  navigator.clipboard.writeText(currentCode).then(() => {
+    btn.textContent = '✅ Copié !';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.innerHTML = '📋 Copy Code';
+      btn.classList.remove('copied');
+    }, 2000);
+  }).catch(() => {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = currentCode;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = '✅ Copié !';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.innerHTML = '📋 Copy Code';
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+}
+
+/* ── PULSE TOAST ── */
+function pulse(msg) {
+  const el = document.createElement('div');
+  el.style.cssText = `
+    position:fixed;top:20px;left:50%;transform:translateX(-50%);
+    background:#1a1a1a;border:1px solid rgba(255,0,51,0.4);border-radius:10px;
+    color:#fff;padding:12px 20px;font-size:0.85rem;font-weight:600;
+    z-index:9999;max-width:90vw;text-align:center;
+    box-shadow:0 4px 20px rgba(0,0,0,0.5);
+    animation:fadeInDown 0.3s ease;
+  `;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+/* ── INCREMENT ACTIVE (visual only) ── */
+function incrementActive(id) {
+  const s = SERVERS.find(x => x.id === id);
+  if (s && s.active < 50) {
+    s.active++;
+    if (s.active >= 50) s.full = true;
+    renderServers();
+    // update sel display
+    document.getElementById('selLimit').textContent = `${s.active}/50`;
+  }
+}
+
+/* ── ENTER KEY ── */
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('phoneInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') generateCode();
+  });
+  // Auto-select server 1
+  renderServers();
+  selectServer(1);
+});
+
+// Animate pulse toast
+const style = document.createElement('style');
+style.textContent = `@keyframes fadeInDown{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}`;
+document.head.appendChild(style);
+</script>
+
+</body>
+</html>
