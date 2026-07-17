@@ -1,129 +1,198 @@
 /**
  * VARNOX XD V2 — Pairing Code API
- * Vercel Serverless Function: /api/code?number=XXXX
+ * Vercel Serverless Function  →  GET /api/code?number=2246XXXXXXXX
+ *
+ * Flow Baileys correct :
+ *  1. Créer socket SANS creds enregistrées
+ *  2. Attendre connection.update → state "connecting"
+ *  3. Appeler requestPairingCode(number) → WhatsApp renvoie le code 8 chiffres
+ *  4. Retourner le code formaté XXXX-XXXX au client
  */
 
-// Hard-coded WA version — avoids fetchLatestBaileysVersion() network call which fails on Vercel
-const WA_VERSION = [2, 3000, 1023097280];
+'use strict';
+
+const fs = require('fs');
 
 module.exports = async (req, res) => {
-    // Always respond with JSON, even on crash
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Content-Type', 'application/json');
 
     if (req.method === 'OPTIONS') return res.status(200).end();
 
+    /* ── Validation du numéro ── */
     let { number } = req.query;
-    if (!number) return res.status(400).json({ error: true, message: 'Numéro requis' });
-
+    if (!number) {
+        return res.status(400).json({ error: true, message: 'Numéro requis.' });
+    }
     number = number.replace(/[^0-9]/g, '');
     if (number.length < 7 || number.length > 15) {
-        return res.status(400).json({ error: true, message: 'Numéro invalide (7 à 15 chiffres)' });
+        return res.status(400).json({ error: true, message: 'Numéro invalide (7–15 chiffres).' });
     }
 
-    // Lazy-load Baileys inside the handler so import errors return JSON, not a 500 HTML page
+    /* ── Chargement paresseux de Baileys (si crash → JSON, pas page 500) ── */
     let makeWASocket, useMultiFileAuthState, DisconnectReason,
-        makeCacheableSignalKeyStore, Browsers, Boom, pino, NodeCache, fs;
-
+        makeCacheableSignalKeyStore, Browsers, fetchLatestBaileysVersion,
+        Boom, pino, NodeCache;
     try {
-        const baileys = require('@whiskeysockets/baileys');
-        makeWASocket             = baileys.default;
-        useMultiFileAuthState    = baileys.useMultiFileAuthState;
-        DisconnectReason         = baileys.DisconnectReason;
-        makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore;
-        Browsers                 = baileys.Browsers;
-        Boom                     = require('@hapi/boom').Boom;
-        pino                     = require('pino');
-        NodeCache                = require('node-cache');
-        fs                       = require('fs');
-    } catch (importErr) {
-        console.error('[VARNOX] Import error:', importErr.message);
+        const B = require('@whiskeysockets/baileys');
+        makeWASocket               = B.default;
+        useMultiFileAuthState      = B.useMultiFileAuthState;
+        DisconnectReason           = B.DisconnectReason;
+        makeCacheableSignalKeyStore = B.makeCacheableSignalKeyStore;
+        Browsers                   = B.Browsers;
+        fetchLatestBaileysVersion  = B.fetchLatestBaileysVersion;
+        Boom      = require('@hapi/boom').Boom;
+        pino      = require('pino');
+        NodeCache = require('node-cache');
+    } catch (e) {
+        console.error('[VARNOX] import error:', e.message);
         return res.status(500).json({
             error: true,
-            message: 'Erreur de chargement du module. Réessayez dans quelques secondes.'
+            message: 'Erreur de chargement (module). Réessayez dans 10s.'
         });
     }
 
-    // /tmp is the only writable dir on Vercel
-    const sessionDir = `/tmp/vx2_${number}_${Date.now()}`;
+    /* ── Version WhatsApp : tenter fetchLatest, sinon fallback connu ── */
+    let waVersion = [2, 3000, 1023097280];
+    try {
+        const { version } = await Promise.race([
+            fetchLatestBaileysVersion(),
+            new Promise((_, r) => setTimeout(() => r(new Error('WA version timeout')), 6000))
+        ]);
+        waVersion = version;
+    } catch { /* fallback */ }
 
+    /* ── Session fraîche : supprimer les anciennes sessions du même numéro ── */
+    const TMP = '/tmp';
+    try {
+        fs.readdirSync(TMP)
+          .filter(d => d.startsWith(`vx2_${number}_`))
+          .forEach(d => fs.rmSync(`${TMP}/${d}`, { recursive: true, force: true }));
+    } catch { /* /tmp peut être vide */ }
+
+    const sessionDir = `${TMP}/vx2_${number}_${Date.now()}`;
     try {
         fs.mkdirSync(sessionDir, { recursive: true });
+    } catch (e) {
+        return res.status(500).json({ error: true, message: 'Impossible de créer le dossier de session.' });
+    }
 
+    /* ── Initialisation socket Baileys ── */
+    let sock;
+    try {
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
         const msgRetryCounterCache = new NodeCache();
 
-        const sock = makeWASocket({
-            version: WA_VERSION,
-            logger: pino({ level: 'silent' }),
-            printQRInTerminal: false,
-            browser: Browsers.ubuntu('Chrome'),
+        sock = makeWASocket({
+            version:             waVersion,
+            logger:              pino({ level: 'silent' }),
+            printQRInTerminal:   false,
+            browser:             Browsers.ubuntu('Chrome'),
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+                keys:  makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
             },
             msgRetryCounterCache,
-            connectTimeoutMs: 20000,
-            defaultQueryTimeoutMs: 15000,
-            keepAliveIntervalMs: 5000,
+            connectTimeoutMs:        20000,
+            defaultQueryTimeoutMs:   15000,
+            keepAliveIntervalMs:     5000,
+            generateHighQualityLinkPreview: false,
+            syncFullHistory:         false,
         });
 
         sock.ev.on('creds.update', saveCreds);
+    } catch (e) {
+        cleanup(sessionDir);
+        return res.status(500).json({ error: true, message: 'Erreur d\'initialisation Baileys : ' + e.message });
+    }
 
-        const code = await new Promise((resolve, reject) => {
-            let done = false;
-
-            const finish = (fn) => (...args) => {
-                if (done) return;
-                done = true;
-                clearTimeout(hardTimeout);
-                fn(...args);
-            };
-
-            // 25s hard timeout — well within Vercel's 60s limit
-            const hardTimeout = setTimeout(finish(reject), 25000,
-                new Error('Timeout WhatsApp (25s). Vérifiez votre numéro et réessayez.'));
-
-            // Request code after socket initialises (~2.5s)
-            setTimeout(async () => {
-                try {
-                    if (sock.authState.creds.registered) {
-                        return finish(reject)(new Error('Ce numéro est déjà enregistré.'));
-                    }
-                    const raw = await sock.requestPairingCode(number);
-                    const formatted = raw?.match(/.{1,4}/g)?.join('-') ?? raw;
-                    finish(resolve)(formatted);
-                } catch (err) {
-                    finish(reject)(err);
-                }
-            }, 2500);
-
-            sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
-                if (connection === 'close') {
-                    const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-                    if (statusCode === DisconnectReason.loggedOut) {
-                        finish(reject)(new Error('Session expirée. Réessayez.'));
-                    }
-                    // Other close reasons: socket auto-reconnects; let the 2.5s timer handle it
-                }
-            });
-        });
-
-        // Non-blocking cleanup
-        try { sock.end(); } catch (_) {}
-        setTimeout(() => {
-            try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (_) {}
-        }, 3000);
-
-        return res.status(200).json({ code });
-
-    } catch (err) {
-        try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (_) {}
-        console.error('[VARNOX] Pairing error:', err.message);
-        return res.status(200).json({
-            error: true,
-            message: err.message || 'Erreur interne. Réessayez.'
-        });
+    /* ── Demande du code de parrainage ── */
+    try {
+        const code = await requestCode(sock, number, Boom, DisconnectReason);
+        const formatted = code?.match(/.{1,4}/g)?.join('-') ?? code;
+        cleanup(sessionDir);
+        return res.status(200).json({ code: formatted });
+    } catch (e) {
+        cleanup(sessionDir);
+        return res.status(200).json({ error: true, message: e.message || 'Échec du parrainage. Réessayez.' });
     }
 };
+
+/* ─────────────────────────────────────────────────
+   requestCode — logique Baileys correcte :
+   Attendre que le socket soit en état "connecting"
+   PUIS appeler requestPairingCode avec retry x3
+───────────────────────────────────────────────── */
+function requestCode(sock, number, Boom, DisconnectReason) {
+    return new Promise((resolve, reject) => {
+        let done        = false;
+        let attempts    = 0;
+        const MAX_RETRY = 4;
+
+        const finish = (err, val) => {
+            if (done) return;
+            done = true;
+            clearTimeout(hardTimeout);
+            try { sock.end(); } catch {}
+            if (err) reject(err);
+            else     resolve(val);
+        };
+
+        /* Hard timeout 27s (Vercel hobby = 60s, on est largement dans les clous) */
+        const hardTimeout = setTimeout(
+            () => finish(new Error('Timeout 27s — WhatsApp ne répond pas. Vérifiez le numéro et réessayez.')),
+            27000
+        );
+
+        /* Fonction qui demande le code, avec retry */
+        const tryCode = async () => {
+            if (done) return;
+            attempts++;
+            try {
+                if (sock.authState?.creds?.registered) {
+                    return finish(new Error('Ce numéro est déjà connecté. Déconnectez le bot de WhatsApp → Appareils connectés, puis réessayez.'));
+                }
+                const code = await sock.requestPairingCode(number);
+                if (code) finish(null, code);
+                else if (attempts < MAX_RETRY) setTimeout(tryCode, 2500);
+                else finish(new Error('Code non reçu après plusieurs tentatives. Réessayez.'));
+            } catch (e) {
+                if (done) return;
+                if (attempts < MAX_RETRY) {
+                    setTimeout(tryCode, 2500);          // retry
+                } else {
+                    finish(new Error('Erreur requestPairingCode : ' + (e.message || 'inconnue')));
+                }
+            }
+        };
+
+        /* ── Écoute des événements de connexion ── */
+        sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+            if (done) return;
+
+            if (connection === 'connecting') {
+                /* C'est ici que Baileys attend le pairing code — appel immédiat */
+                setTimeout(tryCode, 800);
+            }
+
+            if (connection === 'close') {
+                const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+                if (reason === DisconnectReason.loggedOut) {
+                    finish(new Error('Session expirée. Réessayez.'));
+                }
+                /* Autres raisons : socket se reconnecte seul, on laisse timeout gérer */
+            }
+        });
+
+        /* Sécurité : si connection.update "connecting" ne se déclenche pas
+           (rare mais possible sur cold start Vercel), on tente après 4s */
+        setTimeout(() => { if (!done && attempts === 0) tryCode(); }, 4000);
+    });
+}
+
+/* ── Nettoyage du dossier de session ── */
+function cleanup(dir) {
+    try { setTimeout(() => { try { require('fs').rmSync(dir, { recursive: true, force: true }); } catch {} }, 3000); } catch {}
+    try { require('fs').rmSync(dir, { recursive: true, force: true }); } catch {}
+}
