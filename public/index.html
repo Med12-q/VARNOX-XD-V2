@@ -436,6 +436,47 @@
       box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
     }
 
+    /* === WHATSAPP STEPS (affiché après le code) === */
+    .wa-steps {
+      margin-top: 18px;
+      background: rgba(0, 255, 136, 0.04);
+      border: 1px solid rgba(0, 255, 136, 0.18);
+      border-radius: 14px;
+      padding: 18px 20px;
+      text-align: left;
+    }
+    .wa-steps-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.8rem; font-weight: 700;
+      color: var(--neon-green);
+      letter-spacing: 1px;
+      margin-bottom: 14px;
+    }
+    .wa-step-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      margin-bottom: 10px;
+      font-size: 0.9rem; color: var(--text-primary);
+      line-height: 1.5;
+    }
+    .wa-step-num {
+      flex-shrink: 0;
+      width: 22px; height: 22px;
+      background: var(--neon-green);
+      color: #000; font-weight: 700;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem;
+    }
+    .wa-expire {
+      margin-top: 14px;
+      padding: 8px 12px;
+      background: rgba(255, 215, 0, 0.08);
+      border: 1px solid rgba(255, 215, 0, 0.25);
+      border-radius: 8px;
+      font-size: 0.82rem; color: var(--neon-gold);
+      text-align: center;
+    }
+
     /* === LOADING === */
     .loading {
       display: none;
@@ -760,11 +801,33 @@
       <div class="result-box" id="resultBox">
         <div class="result-label">🔑 votre code de jumelage</div>
         <div class="result-code" id="resultCode">----</div>
-        <div class="result-hint">
-          Entrez ce code dans <strong>WhatsApp → Paramètres → Appareils liés → Lier un appareil</strong>
-          <br/>Le code expire dans <strong>60 secondes</strong>
-        </div>
         <button class="copy-btn" onclick="copyCode()">📋 Copier le code</button>
+
+        <!-- Instructions WhatsApp -->
+        <div class="wa-steps" id="waSteps">
+          <div class="wa-steps-title">📱 Comment entrer le code sur WhatsApp :</div>
+          <div class="wa-step-item">
+            <span class="wa-step-num">1</span>
+            <span>Ouvrez <strong>WhatsApp</strong> sur votre téléphone</span>
+          </div>
+          <div class="wa-step-item">
+            <span class="wa-step-num">2</span>
+            <span>Allez dans <strong>Paramètres ⚙️</strong> → <strong>Appareils liés</strong></span>
+          </div>
+          <div class="wa-step-item">
+            <span class="wa-step-num">3</span>
+            <span>Appuyez sur <strong>Lier un appareil</strong></span>
+          </div>
+          <div class="wa-step-item">
+            <span class="wa-step-num">4</span>
+            <span>Choisissez <strong>Lier avec un numéro de téléphone</strong></span>
+          </div>
+          <div class="wa-step-item">
+            <span class="wa-step-num">5</span>
+            <span>Entrez le code affiché ci-dessus → ✅ <strong>Bot connecté !</strong></span>
+          </div>
+          <div class="wa-expire">⏱️ Le code expire dans <strong>60 secondes</strong> — faites vite !</div>
+        </div>
       </div>
     </div>
   </section>
@@ -925,8 +988,9 @@
   // Generate pairing code
   async function generateCode() {
     const phone = document.getElementById('phoneInput').value.trim();
-    const btn = document.getElementById('pairBtn');
-    const loading = document.getElementById('loading');
+    const btn   = document.getElementById('pairBtn');
+    const loading   = document.getElementById('loading');
+    const loadTxt   = document.querySelector('.loading-text');
     const resultBox = document.getElementById('resultBox');
 
     if (!phone || phone.length < 7) {
@@ -939,23 +1003,25 @@
     btn.disabled = true;
     btn.textContent = '⏳ GÉNÉRATION EN COURS...';
     loading.className = 'loading show';
+    if (loadTxt) loadTxt.textContent = 'CONNEXION À WHATSAPP...';
+
+    let countdownTimer = null;
 
     try {
-      // 35-second fetch timeout
+      /* Timeout client 58s (légèrement inférieur à la limite Vercel 60s) */
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 35000);
+      const timeoutId  = setTimeout(() => controller.abort(), 58000);
 
       const res = await fetch(`/code?number=${encodeURIComponent(phone)}`, {
         signal: controller.signal
       });
       clearTimeout(timeoutId);
-
       loading.className = 'loading';
 
-      // Guard against non-JSON Vercel error pages (500, 404, etc.)
+      /* Guard contre les pages d'erreur HTML de Vercel (500, 404…) */
       const ct = res.headers.get('content-type') || '';
       if (!ct.includes('application/json')) {
-        showError(`❌ Erreur serveur HTTP ${res.status} — Redéployez ou réessayez.`);
+        showError(`❌ Erreur serveur HTTP ${res.status} — Redéployez sur Vercel et réessayez.`);
         btn.disabled = false;
         btn.textContent = '⚡ GÉNÉRER LE CODE';
         return;
@@ -964,16 +1030,35 @@
       const data = await res.json();
 
       if (data.code && !data.error) {
+        /* ── Afficher le code ── */
         document.getElementById('resultCode').textContent = data.code;
         resultBox.className = 'result-box show';
+
+        /* ── Compte à rebours 60s ── */
+        const expireEl = document.querySelector('.wa-expire');
+        let secs = 60;
+        if (expireEl) {
+          countdownTimer = setInterval(() => {
+            secs--;
+            if (secs <= 0) {
+              clearInterval(countdownTimer);
+              expireEl.innerHTML = '❌ Code expiré — cliquez sur <strong>GÉNÉRER LE CODE</strong> pour un nouveau code.';
+              expireEl.style.borderColor = 'rgba(255,50,50,0.4)';
+              expireEl.style.color = '#ff5555';
+            } else {
+              expireEl.innerHTML = `⏱️ Le code expire dans <strong>${secs}s</strong> — entrez-le maintenant sur WhatsApp !`;
+            }
+          }, 1000);
+        }
       } else {
         showError('❌ ' + (data.message || 'Erreur lors de la génération. Réessayez.'));
       }
 
     } catch (err) {
       loading.className = 'loading';
+      if (countdownTimer) clearInterval(countdownTimer);
       if (err.name === 'AbortError') {
-        showError('⏱️ Timeout 35s — WhatsApp ne répond pas. Vérifiez le numéro et réessayez.');
+        showError('⏱️ Timeout — WhatsApp ne répond pas. Vérifiez le numéro et réessayez.');
       } else {
         showError('❌ ' + (err.message || 'Erreur réseau. Réessayez.'));
       }
