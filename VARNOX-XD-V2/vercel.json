@@ -1,0 +1,65 @@
+{
+  "version": 2,
+  "name": "varnox-xd-v2",
+  "installCommand": "npm install --legacy-peer-deps",
+  "builds": [
+    {
+      "src": "api/code.js",
+      "use": "@vercel/node",
+      "config": {
+        "maxLambdaSize": "50mb"
+      }
+    },
+    {
+      "src": "api/health.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/code",
+      "dest": "/api/code.js",
+      "methods": ["GET", "OPTIONS"]
+    },
+    {
+      "src": "/health",
+      "dest": "/api/health.js",
+      "methods": ["GET"]
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
+    }
+  ],
+  "functions": {
+    "api/code.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/health.js": {
+      "maxDuration": 10,
+      "memory": 128
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, OPTIONS" },
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" }
+      ]
+    }
+  ]
+}
