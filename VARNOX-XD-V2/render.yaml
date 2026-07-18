@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: varnox-xd-v2
+    runtime: node
+    plan: free
+    buildCommand: npm install --legacy-peer-deps
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: PREFIX
+        value: "."
+      - key: OWNER_NUMBER
+        sync: false
+      - key: RENDER_EXTERNAL_URL
+        sync: false
+      - key: OPENAI_KEY
+        sync: false
+      - key: OPENWEATHER_KEY
+        sync: false
+    disk:
+      name: sessions
+      mountPath: /opt/render/project/src/sessions
+      sizeGB: 1

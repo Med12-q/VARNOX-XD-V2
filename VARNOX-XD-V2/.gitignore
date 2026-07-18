@@ -1,10 +1,9 @@
 node_modules/
 .env
 .env.local
-*.session
-auth_info*/
-/tmp
 *.log
 .vercel
-session/
+sessions/
 baileys_store*.json
+*.session
+auth_info*/

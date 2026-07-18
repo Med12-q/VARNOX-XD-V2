@@ -8,355 +8,199 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    html,body{height:100%}
     body{
       font-family:'Inter',sans-serif;
       background:#100808;
       min-height:100vh;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      padding:32px 16px 40px;
+      display:flex;flex-direction:column;align-items:center;
+      padding:32px 16px 48px;
       color:#fff;
     }
-
-    /* subtle background glow */
     body::before{
-      content:'';
-      position:fixed;inset:0;z-index:0;pointer-events:none;
+      content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
       background:
-        radial-gradient(ellipse 70% 45% at 50% 0%, rgba(200,0,0,0.13) 0%, transparent 70%),
-        radial-gradient(ellipse 50% 35% at 80% 90%, rgba(0,140,255,0.08) 0%, transparent 70%);
+        radial-gradient(ellipse 70% 45% at 50% 0%,rgba(200,0,0,.13) 0%,transparent 70%),
+        radial-gradient(ellipse 50% 35% at 80% 90%,rgba(0,140,255,.08) 0%,transparent 70%);
     }
-
     .page{position:relative;z-index:1;width:100%;max-width:420px;display:flex;flex-direction:column;align-items:center}
 
-    /* ── LOGO ── */
-    .logo-wrap{margin-bottom:16px}
+    /* LOGO */
     .logo-circle{
       width:88px;height:88px;border-radius:50%;
       background:linear-gradient(135deg,#ff2200 0%,#ff0080 55%,#0088ff 100%);
-      display:flex;align-items:center;justify-content:center;
-      box-shadow:0 0 0 8px rgba(255,30,30,0.1),0 8px 32px rgba(255,0,60,0.3);
-      animation:logopulse 3s ease-in-out infinite;
-      font-size:2.2rem;
+      display:flex;align-items:center;justify-content:center;font-size:2.2rem;
+      box-shadow:0 0 0 8px rgba(255,30,30,.1),0 8px 32px rgba(255,0,60,.3);
+      animation:lp 3s ease-in-out infinite;margin-bottom:16px;
     }
-    @keyframes logopulse{
-      0%,100%{box-shadow:0 0 0 8px rgba(255,30,30,0.1),0 8px 32px rgba(255,0,60,0.25)}
-      50%{box-shadow:0 0 0 14px rgba(255,30,30,0.06),0 8px 40px rgba(255,0,80,0.4),0 0 20px rgba(0,140,255,0.15)}
+    @keyframes lp{
+      0%,100%{box-shadow:0 0 0 8px rgba(255,30,30,.1),0 8px 32px rgba(255,0,60,.25)}
+      50%{box-shadow:0 0 0 14px rgba(255,30,30,.06),0 8px 40px rgba(255,0,80,.4),0 0 20px rgba(0,140,255,.15)}
     }
+    .brand-name{font-size:1.9rem;font-weight:800;letter-spacing:2px;color:#ff3333;text-shadow:0 0 20px rgba(255,40,40,.5);margin-bottom:5px;text-align:center}
+    .brand-sub{font-size:.95rem;color:rgba(255,255,255,.5);margin-bottom:24px;text-align:center}
 
-    /* ── BRAND ── */
-    .brand-name{
-      font-size:1.9rem;font-weight:800;letter-spacing:2px;
-      color:#ff3333;
-      text-shadow:0 0 20px rgba(255,40,40,0.5);
-      margin-bottom:5px;text-align:center;
-    }
-    .brand-sub{
-      font-size:0.95rem;font-weight:400;
-      color:rgba(255,255,255,0.55);
-      margin-bottom:24px;text-align:center;letter-spacing:.3px;
-    }
+    /* CARDS */
+    .card{width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,60,60,.18);border-radius:16px;margin-bottom:12px;overflow:hidden}
 
-    /* ── CARDS COMMON ── */
-    .card{
-      width:100%;
-      background:rgba(255,255,255,0.04);
-      border:1px solid rgba(255,60,60,0.18);
-      border-radius:16px;
-      margin-bottom:12px;
-      overflow:hidden;
-    }
-
-    /* ── SERVER LIST ── */
-    .server-scroll{
-      max-height:260px;
-      overflow-y:auto;
-      display:flex;flex-direction:column;gap:0;
-    }
+    /* SERVER LIST */
+    .server-scroll{max-height:260px;overflow-y:auto;display:flex;flex-direction:column}
     .server-scroll::-webkit-scrollbar{width:4px}
-    .server-scroll::-webkit-scrollbar-track{background:transparent}
-    .server-scroll::-webkit-scrollbar-thumb{background:rgba(255,60,60,0.3);border-radius:2px}
+    .server-scroll::-webkit-scrollbar-thumb{background:rgba(255,60,60,.3);border-radius:2px}
 
-    .server-row{
-      display:flex;align-items:center;gap:12px;
-      padding:13px 14px;
-      cursor:pointer;
-      transition:background .15s;
-      border-bottom:1px solid rgba(255,255,255,0.04);
-    }
-    .server-row:last-child{border-bottom:none}
-    .server-row:hover{background:rgba(255,255,255,0.03)}
-    .server-row.active{background:rgba(255,40,40,0.07)}
+    .srv-row{display:flex;align-items:center;gap:12px;padding:13px 14px;cursor:pointer;transition:background .15s;border-bottom:1px solid rgba(255,255,255,.04)}
+    .srv-row:last-child{border-bottom:none}
+    .srv-row:hover{background:rgba(255,255,255,.03)}
+    .srv-row.active{background:rgba(255,40,40,.07)}
 
-    /* stack icon — exactly like ERFAN-MD */
-    .srv-icon{
-      flex-shrink:0;
-      display:flex;flex-direction:column;gap:3px;
-      width:32px;
-    }
-    .srv-icon span{
-      display:block;height:5px;border-radius:2px;
-      background:rgba(255,80,80,0.7);
-    }
-    .server-row.active .srv-icon span{background:#ff3333}
+    /* stack icon */
+    .srv-icon{flex-shrink:0;display:flex;flex-direction:column;gap:3px;width:32px}
+    .srv-icon span{display:block;height:5px;border-radius:2px;background:rgba(255,80,80,.55)}
+    .srv-row.active .srv-icon span{background:#ff3333}
     .srv-icon span:nth-child(1){width:100%}
-    .srv-icon span:nth-child(2){width:75%}
-    .srv-icon span:nth-child(3){width:55%}
+    .srv-icon span:nth-child(2){width:72%}
+    .srv-icon span:nth-child(3){width:50%}
 
     .srv-body{flex:1;min-width:0}
-    .srv-name{
-      font-size:.88rem;font-weight:700;color:rgba(255,255,255,.9);
-      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-      margin-bottom:4px;
-    }
-    .server-row.active .srv-name{color:#fff}
+    .srv-name{font-size:.88rem;font-weight:700;color:rgba(255,255,255,.85);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .srv-row.active .srv-name{color:#fff}
     .srv-stats{display:flex;align-items:center;gap:14px}
-    .srv-stat{display:flex;align-items:center;gap:5px;font-size:.73rem;color:rgba(255,255,255,.45)}
-    .srv-dot{
-      width:7px;height:7px;border-radius:50%;flex-shrink:0;
-      background:#22c55e;box-shadow:0 0 5px #22c55e;
-    }
+    .srv-stat{display:flex;align-items:center;gap:5px;font-size:.72rem;color:rgba(255,255,255,.4)}
+    .srv-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:#22c55e;box-shadow:0 0 5px #22c55e}
     .srv-dot.full{background:#ff3333;box-shadow:0 0 5px #ff3333}
-    .srv-people{font-size:.7rem;opacity:.6}
 
     .srv-btn{
-      flex-shrink:0;
-      padding:7px 14px;
-      background:rgba(255,255,255,0.07);
-      border:1px solid rgba(255,255,255,0.12);
-      border-radius:10px;
-      color:rgba(255,255,255,.7);
-      font-size:.78rem;font-weight:600;
-      cursor:pointer;white-space:nowrap;
+      flex-shrink:0;padding:7px 14px;
+      background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+      border-radius:10px;color:rgba(255,255,255,.65);
+      font-size:.78rem;font-weight:600;cursor:pointer;white-space:nowrap;
       transition:all .2s;font-family:'Inter',sans-serif;
     }
-    .server-row.active .srv-btn{
-      background:rgba(255,40,40,0.15);
-      border-color:rgba(255,40,40,0.4);
-      color:#ff5555;
-    }
-    .server-row:not(.active):hover .srv-btn{
-      border-color:rgba(255,255,255,0.22);color:#fff;
-    }
+    .srv-row.active .srv-btn{background:rgba(255,40,40,.15);border-color:rgba(255,40,40,.4);color:#ff5555}
+    .srv-row:not(.active):hover .srv-btn{border-color:rgba(255,255,255,.22);color:#fff}
 
-    /* ── INFO BOX ── */
-    .info-card{
-      display:flex;align-items:flex-start;gap:12px;
-      padding:14px 16px;
-    }
-    .info-i{
-      flex-shrink:0;
-      width:30px;height:30px;border-radius:50%;
-      background:#ff3333;
-      display:flex;align-items:center;justify-content:center;
-      font-size:.82rem;font-weight:800;color:#fff;
-      box-shadow:0 0 12px rgba(255,40,40,0.45);
-      margin-top:1px;
-    }
-    .info-text .info-title{font-size:.88rem;font-weight:700;color:#fff;margin-bottom:4px}
-    .info-text .info-desc{font-size:.77rem;color:rgba(255,255,255,.45);line-height:1.55}
+    /* INFO BOX */
+    .info-card{display:flex;align-items:flex-start;gap:12px;padding:14px 16px}
+    .info-i{flex-shrink:0;width:30px;height:30px;border-radius:50%;background:#ff3333;display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:800;color:#fff;box-shadow:0 0 12px rgba(255,40,40,.45);margin-top:1px}
+    .info-title{font-size:.88rem;font-weight:700;color:#fff;margin-bottom:4px}
+    .info-desc{font-size:.77rem;color:rgba(255,255,255,.42);line-height:1.55}
 
-    /* ── FORM ── */
-    .form-section{width:100%}
-    .field-label{
-      font-size:.88rem;font-weight:600;color:rgba(255,255,255,.85);
-      margin-bottom:9px;display:block;
-    }
-    .input-wrap{
-      display:flex;align-items:center;
-      background:rgba(255,255,255,0.06);
-      border:1px solid rgba(255,255,255,0.1);
-      border-radius:14px;overflow:hidden;
-      transition:border-color .2s,box-shadow .2s;
-      margin-bottom:8px;
-    }
-    .input-wrap:focus-within{
-      border-color:rgba(0,170,255,0.45);
-      box-shadow:0 0 0 3px rgba(0,170,255,0.08);
-    }
-    .input-icon{
-      padding:0 14px;height:52px;
-      display:flex;align-items:center;
-      border-right:1px solid rgba(255,255,255,0.08);
-      flex-shrink:0;
-    }
-    /* phone SVG icon like ERFAN-MD */
-    .input-icon svg{width:18px;height:18px;opacity:.4}
-    .phone-inp{
-      flex:1;background:transparent;border:none;outline:none;
-      font-family:'Inter',sans-serif;font-size:.97rem;color:#fff;
-      padding:0 14px;height:52px;
-    }
-    .phone-inp::placeholder{color:rgba(255,255,255,.25)}
-    .hint-row{
-      display:flex;align-items:center;gap:6px;
-      font-size:.73rem;color:rgba(255,255,255,.35);
-      margin-bottom:16px;padding:0 2px;
-    }
-    .hint-row svg{width:13px;height:13px;opacity:.5;flex-shrink:0}
+    /* FORM */
+    .form-wrap{width:100%}
+    .f-label{font-size:.88rem;font-weight:600;color:rgba(255,255,255,.82);margin-bottom:9px;display:block}
+    .inp-wrap{display:flex;align-items:center;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:14px;overflow:hidden;transition:border-color .2s,box-shadow .2s;margin-bottom:8px}
+    .inp-wrap:focus-within{border-color:rgba(0,170,255,.45);box-shadow:0 0 0 3px rgba(0,170,255,.08)}
+    .inp-icon{padding:0 14px;height:52px;display:flex;align-items:center;border-right:1px solid rgba(255,255,255,.08);flex-shrink:0}
+    .inp-icon svg{width:18px;height:18px;opacity:.4}
+    .phone-inp{flex:1;background:transparent;border:none;outline:none;font-family:'Inter',sans-serif;font-size:.97rem;color:#fff;padding:0 14px;height:52px}
+    .phone-inp::placeholder{color:rgba(255,255,255,.22)}
+    .hint{display:flex;align-items:center;gap:6px;font-size:.72rem;color:rgba(255,255,255,.3);margin-bottom:16px;padding:0 2px}
+    .hint svg{width:13px;height:13px;opacity:.45;flex-shrink:0}
 
-    /* ── GENERATE BUTTON ── */
+    /* GENERATE BUTTON */
     .btn-gen{
       width:100%;height:54px;border:none;border-radius:14px;
       background:linear-gradient(90deg,#ff2200 0%,#ff007a 50%,#0088ff 100%);
-      color:#fff;font-family:'Inter',sans-serif;
-      font-size:.97rem;font-weight:700;letter-spacing:.5px;
+      color:#fff;font-family:'Inter',sans-serif;font-size:.97rem;font-weight:700;
       cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;
       transition:opacity .2s,transform .15s,box-shadow .2s;
-      box-shadow:0 4px 24px rgba(255,0,80,0.35);
-      margin-bottom:12px;
+      box-shadow:0 4px 24px rgba(255,0,80,.35);margin-bottom:12px;
     }
-    .btn-gen:hover:not(:disabled){opacity:.92;transform:translateY(-1px);box-shadow:0 6px 28px rgba(255,0,80,0.45)}
-    .btn-gen:active:not(:disabled){transform:translateY(0);opacity:1}
-    .btn-gen:disabled{opacity:.5;cursor:not-allowed;transform:none}
+    .btn-gen:hover:not(:disabled){opacity:.9;transform:translateY(-1px);box-shadow:0 6px 30px rgba(255,0,80,.45)}
+    .btn-gen:active:not(:disabled){transform:translateY(0)}
+    .btn-gen:disabled{opacity:.48;cursor:not-allowed;transform:none}
 
-    /* ── LOADING ── */
-    .loading-box{
-      display:none;text-align:center;padding:18px 0 10px;
-    }
-    .loading-box.show{display:block}
-    .spin{
-      width:40px;height:40px;border:3px solid rgba(255,40,40,0.15);
-      border-top-color:#ff3333;border-radius:50%;
-      animation:spin .7s linear infinite;margin:0 auto 10px;
-    }
+    /* LOADING */
+    .load-box{display:none;text-align:center;padding:16px 0 8px}
+    .load-box.show{display:block}
+    .spin{width:40px;height:40px;border:3px solid rgba(255,40,40,.15);border-top-color:#ff3333;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 10px}
     @keyframes spin{to{transform:rotate(360deg)}}
-    .spin-txt{font-size:.78rem;color:rgba(255,255,255,.4);letter-spacing:1px;animation:blink 1.3s ease-in-out infinite}
-    @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+    .spin-txt{font-size:.78rem;color:rgba(255,255,255,.35);letter-spacing:1px;animation:blink 1.3s ease-in-out infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
 
-    /* ── CODE RESULT (exactly like ERFAN-MD) ── */
+    /* CODE RESULT — inline layout like ERFAN-MD */
     .code-card{
       display:none;width:100%;
-      background:rgba(255,255,255,0.04);
-      border:1px solid rgba(0,170,255,0.35);
-      border-radius:14px;
-      padding:16px 18px;
+      background:rgba(255,255,255,.04);border:1px solid rgba(0,170,255,.35);
+      border-radius:14px;padding:16px 18px;
       flex-direction:row;align-items:center;gap:14px;
-      margin-bottom:10px;
-      animation:popin .3s cubic-bezier(.34,1.56,.64,1);
+      margin-bottom:10px;animation:popin .3s cubic-bezier(.34,1.56,.64,1);
     }
     .code-card.show{display:flex}
     @keyframes popin{from{opacity:0;transform:scale(.92) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}
-
     .code-check{
-      flex-shrink:0;width:36px;height:36px;border-radius:50%;
-      background:#ff3333;
+      flex-shrink:0;width:36px;height:36px;border-radius:50%;background:#ff3333;
       display:flex;align-items:center;justify-content:center;
-      box-shadow:0 0 16px rgba(255,40,40,0.45);
+      box-shadow:0 0 16px rgba(255,40,40,.45);
     }
     .code-check svg{width:18px;height:18px}
     .code-text{
-      font-size:1.55rem;font-weight:700;letter-spacing:6px;
-      color:#00aaff;
-      text-shadow:0 0 16px rgba(0,170,255,0.6);
-      animation:codeglow 2s ease-in-out infinite;
-      word-break:break-all;
+      font-size:1.55rem;font-weight:700;letter-spacing:6px;color:#00aaff;
+      text-shadow:0 0 14px rgba(0,170,255,.55);
+      animation:cg 2s ease-in-out infinite;word-break:break-all;
     }
-    @keyframes codeglow{0%,100%{text-shadow:0 0 12px rgba(0,170,255,0.5)}50%{text-shadow:0 0 24px rgba(0,170,255,0.85)}}
+    @keyframes cg{0%,100%{text-shadow:0 0 10px rgba(0,170,255,.45)}50%{text-shadow:0 0 22px rgba(0,170,255,.85)}}
 
-    /* ── COPY BUTTON (exactly like ERFAN-MD) ── */
+    /* WA STEPS */
+    .wa-box{display:none;width:100%;background:rgba(0,170,255,.05);border:1px solid rgba(0,170,255,.18);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+    .wa-box.show{display:block}
+    .wa-title{font-size:.72rem;font-weight:700;color:rgba(0,170,255,.65);text-transform:uppercase;letter-spacing:1px;margin-bottom:9px}
+    .wa-step{display:flex;align-items:flex-start;gap:8px;margin-bottom:7px;font-size:.78rem;color:rgba(255,255,255,.42);line-height:1.45}
+    .wa-step:last-child{margin-bottom:0}
+    .wa-num{flex-shrink:0;width:16px;height:16px;border-radius:50%;background:rgba(0,170,255,.15);border:1px solid rgba(0,170,255,.3);font-size:.6rem;font-weight:700;color:#00aaff;display:flex;align-items:center;justify-content:center;margin-top:1px}
+    .wa-step strong{color:rgba(255,255,255,.65)}
+
+    /* COUNTDOWN */
+    .cd-row{display:none;align-items:center;justify-content:space-between;margin-bottom:10px;padding:0 2px}
+    .cd-row.show{display:flex}
+    .cd-lbl{font-size:.72rem;color:rgba(255,255,255,.28)}
+    .cd-val{font-size:.82rem;font-weight:700;color:#00aaff;font-family:monospace}
+    .cd-val.urgent{color:#ff3333}
+
+    /* ERROR */
+    .err-card{display:none;width:100%;background:rgba(255,0,0,.06);border:1px solid rgba(255,0,0,.25);border-radius:14px;padding:14px 18px;font-size:.85rem;color:#ff6666;line-height:1.5;margin-bottom:10px;animation:popin .3s ease}
+    .err-card.show{display:block}
+
+    /* COPY BUTTON */
     .btn-copy{
       display:none;width:100%;height:50px;
-      background:rgba(255,255,255,0.06);
-      border:1px solid rgba(255,255,255,0.1);
-      border-radius:14px;
-      color:rgba(255,255,255,.8);font-family:'Inter',sans-serif;
-      font-size:.92rem;font-weight:600;
+      background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+      border-radius:14px;color:rgba(255,255,255,.75);
+      font-family:'Inter',sans-serif;font-size:.92rem;font-weight:600;
       cursor:pointer;align-items:center;justify-content:center;gap:8px;
       transition:all .2s;margin-bottom:12px;
     }
     .btn-copy.show{display:flex}
-    .btn-copy:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
+    .btn-copy:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.18)}
     .btn-copy.ok{border-color:rgba(34,197,94,.5);color:#22c55e}
 
-    /* ── ERROR ── */
-    .error-card{
-      display:none;width:100%;
-      background:rgba(255,0,0,0.06);border:1px solid rgba(255,0,0,0.25);
-      border-radius:14px;padding:14px 18px;
-      font-size:.85rem;color:#ff6666;line-height:1.5;
-      margin-bottom:10px;
-      animation:popin .3s ease;
-    }
-    .error-card.show{display:block}
+    /* FOOTER */
+    .footer{margin-top:8px;font-size:.73rem;color:rgba(255,255,255,.22);text-align:center}
 
-    /* WA steps (after code) */
-    .wa-box{
-      display:none;width:100%;
-      background:rgba(0,170,255,0.05);
-      border:1px solid rgba(0,170,255,0.18);
-      border-radius:14px;padding:14px 16px;margin-bottom:10px;
-    }
-    .wa-box.show{display:block}
-    .wa-box-title{font-size:.73rem;font-weight:700;color:rgba(0,170,255,.7);text-transform:uppercase;letter-spacing:1px;margin-bottom:9px}
-    .wa-step{display:flex;align-items:flex-start;gap:8px;margin-bottom:7px;font-size:.78rem;color:rgba(255,255,255,.45);line-height:1.45}
-    .wa-step:last-child{margin-bottom:0}
-    .wa-num{
-      flex-shrink:0;width:16px;height:16px;border-radius:50%;
-      background:rgba(0,170,255,0.15);border:1px solid rgba(0,170,255,0.3);
-      font-size:.6rem;font-weight:700;color:#00aaff;
-      display:flex;align-items:center;justify-content:center;margin-top:1px;
-    }
-    .wa-step strong{color:rgba(255,255,255,.7)}
-
-    /* countdown */
-    .cd-row{display:none;align-items:center;justify-content:space-between;margin-bottom:10px;padding:0 2px}
-    .cd-row.show{display:flex}
-    .cd-lbl{font-size:.72rem;color:rgba(255,255,255,.3)}
-    .cd-val{font-size:.82rem;font-weight:700;color:#00aaff;font-family:monospace}
-    .cd-val.urgent{color:#ff3333}
-
-    /* ── FOOTER ── */
-    .footer{
-      margin-top:8px;
-      font-size:.73rem;color:rgba(255,255,255,.25);
-      text-align:center;
-    }
-
-    /* ── TOAST ── */
-    .toast{
-      position:fixed;top:18px;left:50%;transform:translateX(-50%) translateY(-60px);
-      background:#1a1a1a;border:1px solid rgba(255,50,50,0.3);
-      border-radius:12px;padding:11px 20px;
-      font-size:.82rem;font-weight:600;color:#fff;
-      white-space:nowrap;z-index:999;
-      transition:transform .3s cubic-bezier(.34,1.56,.64,1);
-      box-shadow:0 8px 24px rgba(0,0,0,.5);
-    }
+    /* TOAST */
+    .toast{position:fixed;top:18px;left:50%;transform:translateX(-50%) translateY(-70px);background:#1a1a1a;border:1px solid rgba(255,50,50,.3);border-radius:12px;padding:11px 20px;font-size:.82rem;font-weight:600;color:#fff;white-space:nowrap;z-index:999;transition:transform .3s cubic-bezier(.34,1.56,.64,1);box-shadow:0 8px 24px rgba(0,0,0,.5)}
     .toast.show{transform:translateX(-50%) translateY(0)}
 
-    @media(max-width:400px){
-      .brand-name{font-size:1.6rem}
-      .code-text{font-size:1.3rem;letter-spacing:4px}
-    }
+    @media(max-width:400px){.brand-name{font-size:1.55rem}.code-text{font-size:1.25rem;letter-spacing:4px}}
   </style>
 </head>
 <body>
 <div class="toast" id="toast"></div>
-
 <div class="page">
 
-  <!-- Logo -->
-  <div class="logo-wrap">
-    <div class="logo-circle">⚡</div>
-  </div>
-
-  <!-- Brand -->
+  <div class="logo-circle">⚡</div>
   <div class="brand-name">VARNOX XD V2</div>
   <div class="brand-sub">Generate Your Pairing Code</div>
 
-  <!-- Server List Card -->
+  <!-- Servers -->
   <div class="card">
     <div class="server-scroll" id="srvList"></div>
   </div>
 
-  <!-- Info Card -->
+  <!-- Info -->
   <div class="card">
     <div class="info-card">
       <div class="info-i">i</div>
-      <div class="info-text">
+      <div>
         <div class="info-title">Quick Setup</div>
         <div class="info-desc">Select a server, enter your WhatsApp number to instantly generate a pairing code. No deployment needed!</div>
       </div>
@@ -364,44 +208,37 @@
   </div>
 
   <!-- Form -->
-  <div class="form-section">
-    <label class="field-label">WhatsApp Number</label>
-    <div class="input-wrap">
-      <div class="input-icon">
-        <!-- phone icon like ERFAN-MD -->
+  <div class="form-wrap">
+    <label class="f-label">WhatsApp Number</label>
+    <div class="inp-wrap">
+      <div class="inp-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.82 19.79 19.79 0 01.01 4.18 2 2 0 012 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
         </svg>
       </div>
       <input class="phone-inp" id="phoneInp" type="tel" placeholder="224669288332" maxlength="15" autocomplete="tel"/>
     </div>
-    <div class="hint-row">
-      <!-- lightbulb icon -->
-      <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.5)" stroke="none">
+    <div class="hint">
+      <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.5)">
         <path d="M12 2a7 7 0 00-4 12.74V17a1 1 0 001 1h6a1 1 0 001-1v-2.26A7 7 0 0012 2zm-1 17h2v1h-2zm0 2h2a1 1 0 01-2 0z"/>
       </svg>
       Include country code (e.g., 224 for Guinea, 212 for Morocco)
     </div>
 
-    <!-- Generate -->
-    <button class="btn-gen" id="genBtn" onclick="generate()">
-      <!-- key icon -->
+    <button class="btn-gen" id="genBtn" onclick="go()">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6M15.5 7.5l3 3"/>
       </svg>
       Generate Pair Code
     </button>
 
-    <!-- Loading -->
-    <div class="loading-box" id="loadBox">
+    <div class="load-box" id="loadBox">
       <div class="spin"></div>
       <div class="spin-txt">CONNECTING TO WHATSAPP...</div>
     </div>
+    <div class="err-card" id="errCard"></div>
 
-    <!-- Error -->
-    <div class="error-card" id="errCard"></div>
-
-    <!-- Code result (inline like ERFAN-MD) -->
+    <!-- Code (inline layout: circle ✓ + code) -->
     <div class="code-card" id="codeCard">
       <div class="code-check">
         <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
@@ -411,9 +248,9 @@
       <div class="code-text" id="codeTxt"></div>
     </div>
 
-    <!-- WA steps -->
+    <!-- WA Steps -->
     <div class="wa-box" id="waBox">
-      <div class="wa-box-title">📲 Comment entrer le code</div>
+      <div class="wa-title">📲 Comment entrer le code</div>
       <div class="wa-step"><div class="wa-num">1</div><span>Ouvrez <strong>WhatsApp</strong> sur votre téléphone</span></div>
       <div class="wa-step"><div class="wa-num">2</div><span>Allez dans <strong>Paramètres → Appareils liés</strong></span></div>
       <div class="wa-step"><div class="wa-num">3</div><span>Appuyez sur <strong>Lier un appareil</strong></span></div>
@@ -426,8 +263,8 @@
       <span class="cd-val" id="cdVal">60s</span>
     </div>
 
-    <!-- Copy Code (exactly like ERFAN-MD — dark button, full width) -->
-    <button class="btn-copy" id="copyBtn" onclick="copyCode()">
+    <!-- Copy Code -->
+    <button class="btn-copy" id="copyBtn" onclick="doCopy()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
       </svg>
@@ -435,146 +272,88 @@
     </button>
   </div>
 
-  <!-- Footer -->
   <div class="footer">© 2026 VARNOX XD V2 | Powered by Med12-q</div>
-
 </div>
 
 <script>
-/* ══════════════════════════════════
-   45 SERVERS — limit 50 each
-══════════════════════════════════ */
-function seed(n){ const x=Math.sin(n*9301+49297)*233280; return x-Math.floor(x) }
-const SERVERS = Array.from({length:45},(_,i)=>{
-  const id=i+1, a=Math.min(Math.floor(seed(id*7)*48),50);
-  return {id, name:`Server ${id}`, active:a, limit:50, full:a>=50}
-});
+/* 45 servers seeded */
+function seed(n){const x=Math.sin(n*9301+49297)*233280;return x-Math.floor(x)}
+const SRVS=Array.from({length:45},(_,i)=>{const id=i+1,a=Math.min(Math.floor(seed(id*7)*48),50);return{id,name:`Server ${id}`,active:a,limit:50,full:a>=50}});
+let SEL=null,CODE='',CD=null;
 
-let selected=null, curCode='', cdTimer=null;
-
-/* ── Render ── */
 function render(){
-  const c=document.getElementById('srvList'); c.innerHTML='';
-  SERVERS.forEach(s=>{
-    const row=document.createElement('div');
-    row.className='server-row'+(selected?.id===s.id?' active':'');
-    row.innerHTML=`
+  const c=document.getElementById('srvList');c.innerHTML='';
+  SRVS.forEach(s=>{
+    const r=document.createElement('div');
+    r.className='srv-row'+(SEL?.id===s.id?' active':'');
+    r.innerHTML=`
       <div class="srv-icon"><span></span><span></span><span></span></div>
       <div class="srv-body">
         <div class="srv-name">${s.name}</div>
         <div class="srv-stats">
-          <div class="srv-stat">
-            <div class="srv-dot${s.full?' full':''}"></div>
-            Active: ${s.active}
-          </div>
-          <div class="srv-stat">
-            <span class="srv-people">👥</span>
-            Limit: ${s.active}/${s.limit}
-          </div>
+          <div class="srv-stat"><div class="srv-dot${s.full?' full':''}"></div>Active: ${s.active}</div>
+          <div class="srv-stat"><span style="font-size:.7rem;opacity:.55">👥</span>Limit: ${s.active}/${s.limit}</div>
         </div>
       </div>
-      <button class="srv-btn" onclick="pick(${s.id},event)">
-        ${selected?.id===s.id?'✓ Selected':'∨ Select'}
-      </button>`;
-    c.appendChild(row);
+      <button class="srv-btn" onclick="pick(${s.id},event)">${SEL?.id===s.id?'✓ Selected':'∨ Select'}</button>`;
+    c.appendChild(r);
   });
 }
-
 function pick(id,e){
-  e&&e.stopPropagation();
-  selected=SERVERS.find(s=>s.id===id);
-  render();
-  // scroll into view
-  setTimeout(()=>{
-    const rows=document.querySelectorAll('.server-row');
-    rows.forEach(r=>{ if(r.querySelector('.srv-btn')?.textContent.includes('Selected')) r.scrollIntoView({block:'nearest',behavior:'smooth'}) });
-  },50);
+  e&&e.stopPropagation();SEL=SRVS.find(s=>s.id===id);render();
+  setTimeout(()=>{document.querySelector('.srv-row.active')?.scrollIntoView({block:'nearest',behavior:'smooth'})},50);
 }
 
-/* ── Generate ── */
-async function generate(){
-  if(!selected){ toast('Sélectionnez un serveur d\'abord !'); return }
-  if(selected.full){ toast('Serveur plein (50/50) — choisissez-en un autre !'); return }
+async function go(){
+  if(!SEL){toast('Sélectionnez un serveur !');return}
+  if(SEL.full){toast('Serveur plein — choisissez un autre !');return}
   const ph=document.getElementById('phoneInp').value.replace(/\D/g,'');
-  if(!ph||ph.length<7||ph.length>15){ toast('Entrez un numéro valide avec indicatif pays !'); return }
+  if(!ph||ph.length<7||ph.length>15){toast('Numéro invalide — incluez l\'indicatif pays !');return}
 
-  const btn=document.getElementById('genBtn');
-  btn.disabled=true;
-  show('loadBox'); hide('errCard'); hide('codeCard'); hide('waBox'); hide('cdRow'); hide('copyBtn');
-  if(cdTimer){clearInterval(cdTimer);cdTimer=null}
+  const btn=document.getElementById('genBtn');btn.disabled=true;
+  show('loadBox');hide('errCard');hide('codeCard');hide('waBox');hide('cdRow');hide('copyBtn');
+  if(CD){clearInterval(CD);CD=null}
 
   try{
     const ctrl=new AbortController();
     const tid=setTimeout(()=>ctrl.abort(),58000);
-    const r=await fetch(`/code?number=${ph}`,{signal:ctrl.signal});
+    const r=await fetch('/code?number='+ph,{signal:ctrl.signal});
     clearTimeout(tid);
     const d=await r.json();
-    if(d.error||!d.code){ showErr(d.message||'Erreur. Réessayez.') }
-    else { showCode(d.code); bumpActive(selected.id) }
+    if(d.error||!d.code)showErr(d.message||'Erreur. Réessayez.');
+    else{showCode(d.code);bump(SEL.id)}
   }catch(e){
-    showErr(e.name==='AbortError'?'Timeout — WhatsApp ne répond pas. Vérifiez le numéro.':'Erreur réseau. Réessayez.')
-  }finally{
-    hide('loadBox'); btn.disabled=false;
-  }
+    showErr(e.name==='AbortError'?'Timeout — WhatsApp ne répond pas. Vérifiez votre numéro.':'Erreur réseau. Réessayez.')
+  }finally{hide('loadBox');btn.disabled=false}
 }
 
 function showCode(code){
-  curCode=code;
+  CODE=code;
   document.getElementById('codeTxt').textContent=code;
-  show('codeCard'); show('waBox'); show('cdRow'); show('copyBtn');
-  startCd(60);
+  show('codeCard');show('waBox');show('cdRow');show('copyBtn');
+  let t=60;const el=document.getElementById('cdVal');
+  const tick=()=>{el.textContent=t+'s';el.className='cd-val'+(t<=15?' urgent':'');if(t<=0){clearInterval(CD);el.textContent='Expiré !'}t--};
+  tick();CD=setInterval(tick,1000);
 }
-function showErr(msg){
-  const el=document.getElementById('errCard');
-  el.textContent='❌ '+msg; el.classList.add('show');
-}
-function startCd(sec){
-  const el=document.getElementById('cdVal'); let t=sec;
-  const tick=()=>{
-    el.textContent=t+'s';
-    el.className='cd-val'+(t<=15?' urgent':'');
-    if(t<=0){clearInterval(cdTimer);el.textContent='Expiré !'}
-    t--;
-  };
-  tick(); cdTimer=setInterval(tick,1000);
-}
+function showErr(m){const e=document.getElementById('errCard');e.textContent='❌ '+m;e.classList.add('show')}
 
-/* ── Copy ── */
-function copyCode(){
-  if(!curCode)return;
+function doCopy(){
+  if(!CODE)return;
   const btn=document.getElementById('copyBtn');
-  navigator.clipboard.writeText(curCode).catch(()=>{
-    const ta=document.createElement('textarea');
-    ta.value=curCode;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
-  });
+  navigator.clipboard.writeText(CODE).catch(()=>{const t=document.createElement('textarea');t.value=CODE;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t)});
   btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copié !';
   btn.classList.add('ok');
-  setTimeout(()=>{
-    btn.classList.remove('ok');
-    btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy Code';
-  },2000);
+  setTimeout(()=>{btn.classList.remove('ok');btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy Code'},2000);
 }
 
-/* ── Toast ── */
-function toast(msg){
-  const t=document.getElementById('toast');
-  t.textContent=msg;t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2800);
-}
-
-/* ── Utils ── */
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800)}
 function show(id){document.getElementById(id).classList.add('show')}
 function hide(id){document.getElementById(id).classList.remove('show')}
-function bumpActive(id){
-  const s=SERVERS.find(x=>x.id===id);
-  if(s&&s.active<50){s.active++;if(s.active>=50)s.full=true;render()}
-}
+function bump(id){const s=SRVS.find(x=>x.id===id);if(s&&s.active<50){s.active++;if(s.active>=50)s.full=true;render()}}
 
-/* ── Enter key ── */
 document.addEventListener('DOMContentLoaded',()=>{
-  document.getElementById('phoneInp').addEventListener('keydown',e=>{if(e.key==='Enter')generate()});
-  render();
-  pick(1); // auto-select server 1
+  document.getElementById('phoneInp').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
+  render();pick(1);
 });
 </script>
 </body>
