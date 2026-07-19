@@ -713,7 +713,16 @@ if (RENDER_URL) {
   }, 14 * 60 * 1000); // toutes les 14 minutes
 }
 
-/* ──────────────────────────────────────
+
+    /* ──────────────────────────────────────
+     SPA fallback — React panel
+     Doit être APRÈS les routes API et statique
+    ────────────────────────────────────── */
+    app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    });
+
+    /* ──────────────────────────────────────
    Démarrage du serveur
 ────────────────────────────────────── */
 app.listen(PORT, async () => {
