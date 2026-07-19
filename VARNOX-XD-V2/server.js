@@ -1,8 +1,8 @@
 'use strict';
     /**
     * VARNOX XD V2 — server.js
-    * Panel Web (Express) + Bot WhatsApp (Baileys)
-    * Redéployé le 2026-07-19T11:41:02.524Z
+    * Panel React (Express static) + Bot WhatsApp (Baileys pairing)
+    * v3 — sessions fraîches, /qr, SPA fallback
     */
 
     const express  = require('express');
@@ -13,26 +13,22 @@
     const app  = express();
     const PORT = process.env.PORT || 3000;
 
-    /* Middleware */
     app.use(cors({ origin: '*' }));
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
-    /* Servir le panel React */
+    /* ── Servir le panel React ──────────────────────── */
     app.use(express.static(path.join(__dirname, 'public')));
 
-    /* ── /health ─────────────────────────────────────── */
+    /* ── /health ────────────────────────────────────── */
     app.get('/health', (req, res) => {
-    res.json({
-      status  : 'online',
-      bot     : '𝗩𝗔𝗥𝗡𝗢𝗫 𝗫𝗗 𝗩2',
-      version : '2.0.0',
-      platform: process.env.RAILWAY_ENVIRONMENT || 'Local',
-      uptime  : process.uptime(),
-    });
+    res.json({ status: 'online', bot: 'VARNOX XD V2', version: '3.0.0',
+      platform: process.env.RAILWAY_ENVIRONMENT || 'Local', uptime: process.uptime() });
     });
 
-    /* ── /code — génération du code de parrainage ────── */
+    /* ── /code — génération du code de parrainage ───── */
+    let _currentQR = null;
+
     app.get('/code', async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     let { number } = req.query;
@@ -41,107 +37,93 @@
     if (number.length < 7 || number.length > 15)
       return res.status(400).json({ error: true, message: 'Numéro invalide (7–15 chiffres).' });
 
-    let B, Boom, pino, NodeCache;
+    let makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, Browsers, NodeCache, pino;
     try {
-      B         = require('@whiskeysockets/baileys');
-      Boom      = require('@hapi/boom').Boom;
-      pino      = require('pino');
-      NodeCache = require('node-cache');
+      const B = require('@whiskeysockets/baileys');
+      makeWASocket                = B.default;
+      useMultiFileAuthState       = B.useMultiFileAuthState;
+      makeCacheableSignalKeyStore = B.makeCacheableSignalKeyStore;
+      Browsers                    = B.Browsers;
+      pino                        = require('pino');
+      NodeCache                   = require('node-cache');
     } catch (e) {
       return res.status(500).json({ error: true, message: 'Dépendances manquantes: ' + e.message });
     }
 
-    const {
-      default: makeWASocket,
-      useMultiFileAuthState,
-      makeCacheableSignalKeyStore,
-      Browsers,
-      DisconnectReason,
-    } = B;
-
-    const sessionDir = path.join(__dirname, 'sessions', `pairing_${number}`);
+    // Toujours démarrer une session fraîche pour le parrainage
+    const sessionDir = path.join(__dirname, 'sessions', 'pair_' + number);
+    try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch {}
     fs.mkdirSync(sessionDir, { recursive: true });
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-    const msgRetryCache = new NodeCache({ stdTTL: 120, checkperiod: 15 });
+    const msgCache = new NodeCache({ stdTTL: 120, checkperiod: 15 });
+    const logger   = pino({ level: 'silent' });
 
     const sock = makeWASocket({
-      version: [2, 3000, 1015901307],
-      logger: pino({ level: 'silent' }),
+      version         : [2, 3000, 1015901307],
+      logger,
       printQRInTerminal: false,
-      mobile: false,
+      mobile          : false,
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+        keys : makeCacheableSignalKeyStore(state.keys, logger),
       },
-      msgRetryCounterCache: msgRetryCache,
+      msgRetryCounterCache: msgCache,
       browser: Browsers.macOS('Desktop'),
     });
 
     sock.ev.on('creds.update', saveCreds);
-
-    // QR storage for /qr endpoint
-    sock.ev.on('connection.update', (update) => {
-      const { qr } = update;
-      if (qr) _currentQR = qr;
-      const { connection, lastDisconnect } = update;
-      if (connection === 'open') _currentQR = null;
+    sock.ev.on('connection.update', (u) => {
+      if (u.qr) _currentQR = u.qr;
+      if (u.connection === 'open') _currentQR = null;
     });
 
-    if (!sock.authState.creds.registered) {
-      await new Promise(r => setTimeout(r, 3000));
-      try {
-        const code = await sock.requestPairingCode(number);
-        const fmt  = code?.match(/.{1,4}/g)?.join('-') || code;
-        setTimeout(() => { try { sock.end(); } catch {} }, 65000);
-        return res.json({ error: false, code: fmt });
-      } catch (err) {
-        try { sock.end(); } catch {}
-        return res.status(500).json({ error: true, message: err.message || 'Erreur lors de la génération du code.' });
-      }
-    } else {
+    // Attendre que la socket soit prête
+    await new Promise(r => setTimeout(r, 4000));
+
+    try {
+      const code = await sock.requestPairingCode(number);
+      if (!code) throw new Error('Code vide reçu de Baileys');
+      const fmt = code.match(/.{1,4}/g).join('-');
+      // Fermer la socket après 60s (assez de temps pour entrer le code)
+      setTimeout(() => { try { sock.end(); } catch {} try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch {} }, 60000);
+      return res.json({ error: false, code: fmt });
+    } catch (err) {
       try { sock.end(); } catch {}
-      return res.json({ error: true, message: 'Cette session est déjà enregistrée. Supprimez le dossier de session.' });
+      try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+      return res.status(500).json({ error: true, message: err.message || 'Erreur lors de la génération.' });
     }
     });
 
-    /* ── /qr — QR code WhatsApp ──────────────────────── */
-    let _currentQR = null;
+    /* ── /qr — QR code courant ──────────────────────── */
     app.get('/qr', (req, res) => {
     res.json({ qr: _currentQR, waiting: !_currentQR });
     });
 
-    /* ── /status — statut de session ─────────────────── */
+    /* ── /status ────────────────────────────────────── */
     app.get('/status', (req, res) => {
-    const sessions = listSessions();
     const { number } = req.query;
-    if (!number) return res.json({ sessions: sessions.length, list: sessions });
+    const sessDir = path.join(__dirname, 'sessions');
+    const sessions = fs.existsSync(sessDir)
+      ? fs.readdirSync(sessDir).filter(f => fs.statSync(path.join(sessDir, f)).isDirectory())
+      : [];
+    if (!number) return res.json({ sessions: sessions.length });
     const clean = String(number).replace(/\D/g, '');
-    const exists = sessions.some(s => s.includes(clean));
-    res.json({ number: clean, connected: exists, status: exists ? 'connected' : 'disconnected' });
+    const found = sessions.some(s => s.includes(clean));
+    res.json({ number: clean, connected: found });
     });
 
-    /* ── SPA fallback — React router ─────────────────── */
+    /* ── SPA fallback — React router ────────────────── */
     app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
     });
 
-    /* ── Helpers ─────────────────────────────────────── */
-    function listSessions() {
-    const dir = path.join(__dirname, 'sessions');
-    if (!fs.existsSync(dir)) return [];
-    return fs.readdirSync(dir).filter(f => fs.statSync(path.join(dir, f)).isDirectory());
-    }
-
-    /* ── Démarrage ───────────────────────────────────── */
+    /* ── Démarrage ──────────────────────────────────── */
     app.listen(PORT, () => {
-    console.log('\n╔════════════════════════════════╗');
-    console.log('║   VARNOX XD V2 — Bot WhatsApp  ║');
-    console.log('╚════════════════════════════════╝');
-    console.log(`🌐 Panel  : http://localhost:${PORT}`);
-    console.log(`🔗 Code   : http://localhost:${PORT}/code?number=224XXXXXXXXX`);
-    console.log(`📲 QR     : http://localhost:${PORT}/qr`);
-    console.log(`💚 Health : http://localhost:${PORT}/health\n`);
+    console.log('\n=== VARNOX XD V2 — v3 ===');
+    console.log('Panel : http://localhost:' + PORT);
+    console.log('Code  : http://localhost:' + PORT + '/code?number=224XXXXXXXXX');
+    console.log('QR    : http://localhost:' + PORT + '/qr\n');
     });
 
     module.exports = app;
