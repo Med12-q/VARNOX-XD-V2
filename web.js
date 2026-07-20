@@ -1,12 +1,12 @@
 /**
- * VARNOX XD V2 - web.js  v7 (Fix Railway)
+ * VARNOX XD V2 - web.js  v8 (Fix complet Railway)
  *
- * CORRECTIONS v7 :
- *  - fetchLatestBaileysVersion() avec timeout (évite le blocage infini)
- *  - botConnected NE PLUS pré-mis à true au démarrage (évite "Bot déjà connecté")
- *  - requestPairingCode() appelé APRÈS l'événement "connecting" (fix timing)
- *  - data/owner.json créé automatiquement si absent (évite crash index.js)
- *  - Meilleure gestion d'erreurs partout
+ * BUG #1 CORRIGÉ : fetchLatestBaileysVersion() → timeout 8s + fallback
+ * BUG #2 CORRIGÉ : botConnected ne jamais pré-mis à true au démarrage
+ * BUG #3 CORRIGÉ : UN SEUL handler connection.update (élimine la race condition
+ *                  entre réception du code et événement 'open')
+ * BUG #4 CORRIGÉ : 'connecting' ne peut déclencher tryCode qu'UNE seule fois
+ * BUG #5 CORRIGÉ : SKIP_PAIRING envoyé à index.js pour éviter double pairage
  */
 
 'use strict';
@@ -61,7 +61,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 /* ─── Bot process management ───────────────────────── */
 let botProcess    = null;
-let botConnected  = false;  // mis à true SEULEMENT quand WA confirme 'open'
+let botConnected  = false;  // JAMAIS mis à true au démarrage — seulement après 'open' confirmé
 let _currentQR    = null;
 const activeSockets = new Map();  // number → { sock, timer }
 
@@ -71,7 +71,10 @@ function startBot() {
   botConnected = false;
   botProcess = spawn('node', ['index.js'], {
     stdio : 'inherit',
-    env   : { ...process.env },
+    env   : {
+      ...process.env,
+      SKIP_PAIRING: '1',   // FIX #5 : empêche index.js de tenter un re-pairage
+    },
     cwd   : __dirname,
   });
   botProcess.on('error', err => {
@@ -88,16 +91,14 @@ function startBot() {
   });
 }
 
-/* ─── Auto-démarrage si session déjà présente ──────────
- * FIX : botConnected reste false jusqu'à ce que index.js
- * confirme la connexion. On ne bloque plus /code sur un
- * simple creds.json potentiellement périmé.
+/* ─── Auto-démarrage si session déjà présente ───────────
+ * FIX #2 : botConnected reste false. On ne présuppose plus
+ * que le bot est connecté. Il doit confirmer lui-même.
  * ─────────────────────────────────────────────────────── */
 setTimeout(() => {
   if (fs.existsSync(path.join(SESSION_DIR, 'creds.json'))) {
     console.log('[VARNOX] Session trouvée — démarrage automatique du bot');
-    // botConnected = false  ← intentionnellement laissé à false
-    startBot();
+    startBot();   // botConnected reste false jusqu'à confirmation
   } else {
     console.log('[VARNOX] Aucune session — panel de pairage prêt');
   }
@@ -108,7 +109,7 @@ app.get('/health', (_req, res) => {
   res.json({
     status      : 'online',
     bot         : 'VARNOX XD V2',
-    version     : '7.0.0',
+    version     : '8.0.0',
     platform    : process.env.RAILWAY_ENVIRONMENT || process.env.RENDER || 'Local',
     uptime      : Math.floor(process.uptime()),
     botRunning  : !!botProcess,
@@ -116,7 +117,7 @@ app.get('/health', (_req, res) => {
   });
 });
 
-/* ─── /botStatus — utilisé par le frontend ────────── */
+/* ─── /botStatus ────────────────────────────────────── */
 app.get('/botStatus', (_req, res) => {
   res.json({
     running  : !!botProcess,
@@ -129,7 +130,7 @@ app.get('/botStatus', (_req, res) => {
 app.get('/code', async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
 
-  /* FIX : on bloque SEULEMENT si le bot tourne ET est confirmé connecté */
+  /* Bloquer SEULEMENT si le bot tourne ET est confirmé connecté par WA */
   if (botProcess && botConnected) {
     return res.json({ error: true, message: 'Bot déjà connecté. Redémarre le service pour changer de compte.' });
   }
@@ -140,7 +141,7 @@ app.get('/code', async (req, res) => {
   if (number.length < 7 || number.length > 15)
     return res.json({ error: true, message: 'Numéro invalide (7–15 chiffres)' });
 
-  /* Couper une session de pairage existante pour ce numéro */
+  /* Couper la session de pairage existante pour ce numéro */
   if (activeSockets.has(number)) {
     const old = activeSockets.get(number);
     clearTimeout(old.timer);
@@ -148,15 +149,15 @@ app.get('/code', async (req, res) => {
     activeSockets.delete(number);
   }
 
-  /* Supprimer l'ancienne session incomplète */
+  /* Supprimer l'ancienne session (seulement si le bot ne tourne pas) */
   if (!botProcess) {
     try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch {}
   }
   fs.mkdirSync(SESSION_DIR, { recursive: true });
 
   try {
-    /* FIX : fetchLatestBaileysVersion avec timeout de 8s */
-    let version = [2, 3000, 1023097280]; // fallback fiable
+    /* FIX #1 : fetchLatestBaileysVersion avec timeout 8s + fallback garanti */
+    let version = [2, 3000, 1023097280];
     try {
       const result = await Promise.race([
         fetchLatestBaileysVersion(),
@@ -164,7 +165,7 @@ app.get('/code', async (req, res) => {
       ]);
       if (result?.version) version = result.version;
     } catch (e) {
-      console.warn('[VARNOX] fetchLatestBaileysVersion échoué, utilisation du fallback:', e.message);
+      console.warn('[VARNOX] fetchLatestBaileysVersion échoué → fallback:', e.message);
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
@@ -185,100 +186,80 @@ app.get('/code', async (req, res) => {
       markOnlineOnConnect : true,
     });
 
-    /* Sauvegarder les creds dès qu'ils arrivent (CRITIQUE) */
     sock.ev.on('creds.update', saveCreds);
 
-    /* ─── FIX PRINCIPAL : demander le code APRÈS l'événement "connecting" ─── */
-    const code = await new Promise((resolve, reject) => {
-      let done     = false;
-      let attempts = 0;
-      const MAX    = 4;
+    /* ══════════════════════════════════════════════════════════
+     * FIX #3 + #4 : UN SEUL handler 'connection.update', enregistré
+     * AVANT tout await → zéro race condition entre code et open.
+     * 'connecting' ne déclenche tryCode qu'UNE seule fois.
+     * ══════════════════════════════════════════════════════════ */
+    let codeResolve, codeReject;
+    let codeDone         = false;
+    let connectingFired  = false;  // FIX #4 : garde une seule tentative
+    let attempts         = 0;
+    const MAX            = 4;
 
-      /* Timeout global de 35s */
-      const hard = setTimeout(() => {
-        if (!done) {
-          done = true;
-          reject(new Error('Timeout 35s — WhatsApp ne répond pas. Vérifiez votre numéro et réessayez.'));
-        }
-      }, 35000);
-
-      const tryCode = async () => {
-        if (done) return;
-        attempts++;
-        try {
-          if (sock.authState?.creds?.registered) {
-            clearTimeout(hard);
-            done = true;
-            return reject(new Error('Ce numéro est déjà connecté. Allez dans WhatsApp → Appareils liés, déconnectez le bot, puis réessayez.'));
-          }
-          const raw = await sock.requestPairingCode(number);
-          if (raw) {
-            clearTimeout(hard);
-            done = true;
-            resolve(raw);
-          } else if (attempts < MAX) {
-            setTimeout(tryCode, 2500);
-          } else {
-            clearTimeout(hard);
-            done = true;
-            reject(new Error('Code non reçu après plusieurs tentatives. Réessayez.'));
-          }
-        } catch (e) {
-          if (done) return;
-          console.error(`[VARNOX] requestPairingCode tentative ${attempts}:`, e.message);
-          if (attempts < MAX) {
-            setTimeout(tryCode, 2500);
-          } else {
-            clearTimeout(hard);
-            done = true;
-            reject(new Error('requestPairingCode : ' + (e.message || 'erreur inconnue')));
-          }
-        }
-      };
-
-      /* Écouter "connecting" pour déclencher requestPairingCode au bon moment */
-      sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-        if (qr) _currentQR = qr;
-
-        if (connection === 'connecting' && attempts === 0) {
-          setTimeout(tryCode, 800);
-        }
-
-        if (connection === 'open') {
-          /* Pairage réussi — géré dans le 2ème handler ci-dessous */
-        }
-
-        if (connection === 'close' && !done) {
-          const statusCode = lastDisconnect?.error?.output?.statusCode;
-          if (statusCode === DisconnectReason.loggedOut) {
-            clearTimeout(hard);
-            done = true;
-            reject(new Error('Session expirée. Réessayez.'));
-          }
-        }
-      });
-
-      /* Sécurité cold-start : si "connecting" tarde > 5s, tenter quand même */
-      setTimeout(() => {
-        if (!done && attempts === 0) tryCode();
-      }, 5000);
+    const codePromise = new Promise((res, rej) => {
+      codeResolve = res;
+      codeReject  = rej;
     });
 
-    const formatted = code.replace(/[^A-Z0-9]/g, '').match(/.{1,4}/g).join('-');
+    /* Timeout global 35s */
+    const hardTimeout = setTimeout(() => {
+      if (!codeDone) {
+        codeDone = true;
+        codeReject(new Error('Timeout 35s — WhatsApp ne répond pas. Vérifiez le numéro et réessayez.'));
+      }
+    }, 35000);
 
-    /* Écouter "open" APRÈS avoir reçu le code pour démarrer le bot */
-    sock.ev.on('connection.update', ({ connection }) => {
+    const tryCode = async () => {
+      if (codeDone) return;
+      attempts++;
+      try {
+        if (sock.authState?.creds?.registered) {
+          codeDone = true;
+          clearTimeout(hardTimeout);
+          return codeReject(new Error(
+            'Ce numéro est déjà connecté. Dans WhatsApp → Appareils liés → déconnectez le bot, puis réessayez.'
+          ));
+        }
+        const raw = await sock.requestPairingCode(number);
+        if (raw && !codeDone) {
+          codeDone = true;
+          clearTimeout(hardTimeout);
+          codeResolve(raw);
+        } else if (!codeDone) {
+          if (attempts < MAX) setTimeout(tryCode, 2500);
+          else { codeDone = true; clearTimeout(hardTimeout); codeReject(new Error('Code non reçu après plusieurs tentatives. Réessayez.')); }
+        }
+      } catch (e) {
+        if (codeDone) return;
+        console.error(`[VARNOX] requestPairingCode tentative ${attempts}:`, e.message);
+        if (attempts < MAX) setTimeout(tryCode, 2500);
+        else { codeDone = true; clearTimeout(hardTimeout); codeReject(new Error('requestPairingCode : ' + (e.message || 'erreur inconnue'))); }
+      }
+    };
+
+    /* ─── HANDLER UNIQUE — enregistré avant tout await ─── */
+    sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+      if (qr) _currentQR = qr;
+
+      /* 'connecting' : déclencher tryCode UNE SEULE FOIS (FIX #4) */
+      if (connection === 'connecting' && !connectingFired) {
+        connectingFired = true;
+        setTimeout(tryCode, 800);
+      }
+
+      /* 'open' : pairage réussi — écrire owner.json et lancer le bot */
       if (connection === 'open') {
-        console.log(`[VARNOX] ✅ Pairage réussi pour ${number} !`);
         _currentQR   = null;
         botConnected = true;
+        console.log(`[VARNOX] ✅ Bot connecté pour ${number}`);
 
         /* Écrire/mettre à jour owner.json */
         try {
           let current = {};
-          if (fs.existsSync(OWNER_JSON)) {
-            try { current = JSON.parse(fs.readFileSync(OWNER_JSON, 'utf8')); } catch {}
-          }
+          try { if (fs.existsSync(OWNER_JSON)) current = JSON.parse(fs.readFileSync(OWNER_JSON, 'utf8')); } catch {}
           fs.writeFileSync(OWNER_JSON, JSON.stringify({
             ...current,
             ownerNumber: number,
@@ -288,24 +269,41 @@ app.get('/code', async (req, res) => {
             version    : '2.0.0',
             mess       : current.mess || 'Owner',
           }, null, 2));
-        } catch (e) {
-          console.error('[VARNOX] Impossible d\'écrire owner.json:', e.message);
-        }
+        } catch (e) { console.error('[VARNOX] owner.json write error:', e.message); }
 
-        /* Fermer le socket de pairage avant de lancer le bot */
+        /* Nettoyage socket de pairage */
         const entry = activeSockets.get(number);
-        if (entry) {
-          clearTimeout(entry.timer);
-          activeSockets.delete(number);
-        }
+        if (entry) { clearTimeout(entry.timer); activeSockets.delete(number); }
         try { sock.end(); } catch {}
 
-        /* Lancer index.js */
+        /* Lancer le vrai bot après 1.5s */
         setTimeout(() => startBot(), 1500);
+      }
+
+      /* 'close' : si le code n'a pas encore été envoyé → rejeter */
+      if (connection === 'close' && !codeDone) {
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        if (statusCode === DisconnectReason.loggedOut) {
+          codeDone = true;
+          clearTimeout(hardTimeout);
+          codeReject(new Error('Session expirée. Réessayez.'));
+        }
       }
     });
 
-    /* Timeout 10min — fermer le socket si l'utilisateur n'a pas entré le code */
+    /* Sécurité cold-start : si 'connecting' tarde > 5s */
+    setTimeout(() => {
+      if (!codeDone && !connectingFired) {
+        connectingFired = true;
+        tryCode();
+      }
+    }, 5000);
+
+    /* Attendre le code (le handler 'open' reste actif après resolve) */
+    const raw       = await codePromise;
+    const formatted = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').match(/.{1,4}/g)?.join('-') ?? raw;
+
+    /* Timeout 10min — fermer le socket si l'utilisateur n'entre jamais le code */
     const timer = setTimeout(() => {
       if (activeSockets.has(number)) {
         console.log(`[VARNOX] Timeout 10min — fermeture socket ${number}`);
@@ -348,7 +346,7 @@ app.get('*', (_req, res) => {
 
 /* ─── Démarrage ─────────────────────────────────────── */
 app.listen(PORT, () => {
-  console.log(`\n=== VARNOX XD V2 v7 — Port ${PORT} ===`);
+  console.log(`\n=== VARNOX XD V2 v8 — Port ${PORT} ===`);
   console.log(`Panel   : http://localhost:${PORT}`);
   console.log(`Health  : http://localhost:${PORT}/health`);
   console.log(`Status  : http://localhost:${PORT}/botStatus\n`);

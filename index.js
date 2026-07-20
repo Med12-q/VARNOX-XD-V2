@@ -75,7 +75,7 @@ let owner = (() => { try { return JSON.parse(fs.readFileSync("./data/owner.json"
 
 global.botname = "𝗩𝗔𝗥𝗡𝗢𝗫 𝗫𝗗 𝗩2"
 global.themeemoji = "•"
-const pairingCode = !!phoneNumber || process.argv.includes("--pairing-code")
+const pairingCode = !process.env.SKIP_PAIRING && (!!phoneNumber || process.argv.includes("--pairing-code"))
 const useMobile = process.argv.includes("--mobile")
 
 // Only create readline interface if we're in an interactive environment
@@ -92,7 +92,17 @@ const question = (text) => {
 
 async function startXeonBotInc() {
     try {
-        let { version, isLatest } = await fetchLatestBaileysVersion()
+        let version = [2, 3000, 1023097280];
+        let isLatest = false;
+        try {
+            const _v = await Promise.race([
+                fetchLatestBaileysVersion(),
+                new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 8000))
+            ]);
+            if (_v && _v.version) { version = _v.version; isLatest = _v.isLatest; }
+        } catch (e) {
+            console.warn('[VARNOX] fetchLatestBaileysVersion timeout → fallback version');
+        }
         const { state, saveCreds } = await useMultiFileAuthState(`./session`)
         const msgRetryCounterCache = new NodeCache()
 
