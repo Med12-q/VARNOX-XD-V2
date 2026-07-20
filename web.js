@@ -109,11 +109,53 @@ app.get('/health', (_req, res) => {
   res.json({
     status      : 'online',
     bot         : 'VARNOX XD V2',
-    version     : '8.0.0',
-    platform    : process.env.RAILWAY_ENVIRONMENT || process.env.RENDER || 'Local',
+    version     : '8.1.0',                          // ← changer ici pour confirmer le déploiement
+    build       : '2026-07-20-v8',
+    platform    : process.env.RAILWAY_ENVIRONMENT || process.env.RENDER || 'local',
     uptime      : Math.floor(process.uptime()),
     botRunning  : !!botProcess,
     botConnected,
+    session     : fs.existsSync(path.join(SESSION_DIR, 'creds.json')),
+  });
+});
+
+/* ─── /debug — diagnostic complet ──────────────────── */
+app.get('/debug', (_req, res) => {
+  const sessionFiles = (() => {
+    try { return fs.readdirSync(SESSION_DIR); } catch { return []; }
+  })();
+  const dataFiles = (() => {
+    try { return fs.readdirSync(DATA_DIR); } catch { return []; }
+  })();
+  let ownerData = null;
+  try { ownerData = JSON.parse(fs.readFileSync(OWNER_JSON, 'utf8')); } catch {}
+
+  res.json({
+    ok            : true,
+    version       : '8.1.0',
+    build         : '2026-07-20-v8',
+    nodeVersion   : process.version,
+    platform      : process.env.RAILWAY_ENVIRONMENT || process.env.RENDER || 'local',
+    port          : PORT,
+    uptime        : Math.floor(process.uptime()),
+    // Bot state
+    botRunning    : !!botProcess,
+    botConnected,
+    activeSockets : activeSockets.size,
+    // Filesystem
+    sessionDir    : SESSION_DIR,
+    sessionFiles,
+    hasCredentials: sessionFiles.includes('creds.json'),
+    dataFiles,
+    ownerNumber   : ownerData?.ownerNumber || 'non défini',
+    // Env vars présentes (sans valeur)
+    envVars: {
+      PORT             : !!process.env.PORT,
+      OWNER_NUMBER     : !!process.env.OWNER_NUMBER,
+      SKIP_PAIRING     : !!process.env.SKIP_PAIRING,
+      RAILWAY_ENVIRONMENT: !!process.env.RAILWAY_ENVIRONMENT,
+      RAILWAY_PUBLIC_DOMAIN: !!process.env.RAILWAY_PUBLIC_DOMAIN,
+    },
   });
 });
 
