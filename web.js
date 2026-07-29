@@ -169,7 +169,7 @@ app.get('/health', (_req, res) => {
     bot         : 'VARNOX XD V2',
     version     : '9.0.0',
     build       : '2026-07-20-v9',
-    platform    : process.env.RAILWAY_ENVIRONMENT || 'local',
+    platform    : process.env.RENDER_EXTERNAL_HOSTNAME ? 'render' : process.env.RAILWAY_ENVIRONMENT || 'local',
     uptime      : Math.floor(process.uptime()),
     botRunning  : !!botProcess,
     botConnected,
@@ -189,7 +189,7 @@ app.get('/debug', (_req, res) => {
     version       : '9.0.0',
     build         : '2026-07-20-v9',
     nodeVersion   : process.version,
-    platform      : process.env.RAILWAY_ENVIRONMENT || 'local',
+    platform      : process.env.RENDER_EXTERNAL_HOSTNAME ? 'render' : process.env.RAILWAY_ENVIRONMENT || 'local',
     port          : PORT,
     uptime        : Math.floor(process.uptime()),
     botRunning    : !!botProcess,
@@ -207,6 +207,8 @@ app.get('/debug', (_req, res) => {
       OWNER_NUMBER         : !!process.env.OWNER_NUMBER,
       SKIP_PAIRING         : !!process.env.SKIP_PAIRING,
       RAILWAY_ENVIRONMENT  : !!process.env.RAILWAY_ENVIRONMENT,
+      RENDER               : !!process.env.RENDER,
+      RENDER_EXTERNAL_URL  : !!process.env.RENDER_EXTERNAL_URL,
       RAILWAY_PUBLIC_DOMAIN: !!process.env.RAILWAY_PUBLIC_DOMAIN,
     },
     lastBotLogs: botLogs.slice(-20),  // 20 dernières lignes
@@ -326,6 +328,7 @@ app.get('/code', async (req, res) => {
       },
       msgRetryCounterCache: new NodeCache({ stdTTL: 120 }),
       connectTimeoutMs    : 60000,
+      keepAliveIntervalMs : 10_000,  // ← FIX PRINCIPAL : empêche Railway de tuer la WS idle
       syncFullHistory     : false,
       markOnlineOnConnect : true,
     });
@@ -405,13 +408,49 @@ app.get('/code', async (req, res) => {
         setTimeout(() => startBot(), 2000);
       }
 
-      if (connection === 'close' && !codeDone) {
+      if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        appendLog(`[web] connection close — status=${statusCode}`);
-        if (statusCode === DisconnectReason.loggedOut) {
-          codeDone = true; clearTimeout(hardTimeout);
-          codeReject(new Error('Session expirée. Réessaie.'));
+        // Logger TOUJOURS (même après codeDone) pour voir ce qui se passe
+        appendLog(`[web] connection close — status=${statusCode} codeDone=${codeDone}`);
+
+        if (!codeDone) {
+          // Avant le code → rejeter si loggedOut
+          if (statusCode === DisconnectReason.loggedOut) {
+            codeDone = true; clearTimeout(hardTimeout);
+            codeReject(new Error('Session expirée. Réessaie.'));
+          }
+          // Autres fermetures avant code → laisser le fallback timeout gérer
+          return;
         }
+
+        // ── Après le code : Baileys NE reconnecte PAS ce socket tout seul.
+        // WhatsApp ferme ce socket temporaire une fois le code utilisé — c'est normal.
+        // Il faut vérifier si l'enregistrement a réussi (creds.registered) et,
+        // si oui, démarrer nous-mêmes le vrai bot (index.js) avec la session sauvegardée.
+        const registered = !!sock.authState?.creds?.registered;
+
+        if (registered && !botConnected) {
+          botConnected = true;
+          _currentQR   = null;
+          appendLog(`[web] ✅ Pairing réussi pour ${number} (détecté à la fermeture) — démarrage du bot`);
+          console.log(`[VARNOX] ✅ WhatsApp connecté pour ${number}`);
+
+          initOwnerJson(number);
+
+          const entry = activeSockets.get(number);
+          if (entry) { clearTimeout(entry.timer); activeSockets.delete(number); }
+          try { sock.end(); } catch {}
+
+          setTimeout(() => startBot(), 2000);
+        } else if (!registered && statusCode === DisconnectReason.loggedOut) {
+          // Fermeture après code mais jamais enregistré → vraiment échoué, on nettoie
+          appendLog(`[web] ❌ Pairing échoué pour ${number} (non enregistré, loggedOut)`);
+          const entry = activeSockets.get(number);
+          if (entry) { clearTimeout(entry.timer); activeSockets.delete(number); }
+          try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch {}
+        }
+        // Sinon (fermeture transitoire, pas encore enregistré) → on attend,
+        // le timer de 10 min nettoiera si rien ne se passe.
       }
     });
 

@@ -4,7 +4,7 @@
 
 <br/>
 
-[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&pause=800&color=00D4FF&center=true&vCenter=true&width=600&lines=🤖+VARNOX+XD+V2+—+WhatsApp+Bot;🌐+Web+Pairing+Panel+on+Vercel;⚡+Deploy+in+1+Click+•+24%2F7+Online;✅+No+Errors+•+Pro+Grade+Code)](https://git.io/typing-svg)
+[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&pause=800&color=00D4FF&center=true&vCenter=true&width=600&lines=🤖+VARNOX+XD+V2+—+WhatsApp+Bot;🌐+Web+Pairing+Panel+on+Render;⚡+Deploy+in+1+Click+•+24%2F7+Online;✅+No+Errors+•+Pro+Grade+Code)](https://git.io/typing-svg)
 
 <br/>
 
@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/github/forks/Med12-q/VARNOX-XD-V2?style=for-the-badge&logo=github&color=00D4FF&labelColor=0d1117" alt="Forks"/>
 </a>
 <img src="https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=for-the-badge&logo=node.js&labelColor=0d1117"/>
-<img src="https://img.shields.io/badge/Vercel-Deploy-black?style=for-the-badge&logo=vercel&labelColor=0d1117"/>
+<img src="https://img.shields.io/badge/Render-Deploy-46E3B7?style=for-the-badge&logo=render&labelColor=0d1117"/>
 <img src="https://img.shields.io/badge/WhatsApp-Baileys-25D366?style=for-the-badge&logo=whatsapp&labelColor=0d1117"/>
 <img src="https://img.shields.io/badge/Status-Online%20247-00ff88?style=for-the-badge&logo=statuspage&labelColor=0d1117"/>
 
@@ -25,9 +25,9 @@
 
 <div align="center">
 
-## 🌐 Deploy on Vercel — 1 Click
+## 🌐 Deploy on Render — 1 Click
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Med12-q/VARNOX-XD-V2)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Med12-q/VARNOX-XD-V2)
 
 </div>
 
@@ -37,7 +37,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════╗
-║  🌐  Web Pairing Panel — deployed on Vercel          ║
+║  🌐  Web Pairing Panel — deployed on Render          ║
 ║  ⚡  Instant pairing code via WhatsApp               ║
 ║  🛡️  100+ Commands — AI, Stickers, Media, Games     ║
 ║  🔒  Anti-Bad Word, Anti-Link, Anti-Delete           ║
@@ -50,26 +50,38 @@
 
 ---
 
-## 🚀 Deploy on Vercel (Free, 24/7)
+## 🚀 Deploy on Render (Free, 24/7)
 
 ### Step 1 — Fork the Repository
 ```
 https://github.com/Med12-q/VARNOX-XD-V2
 ```
+Click **Fork** (top right) to copy the repo to your account.
 
-### Step 2 — Deploy on Vercel
-1. Go to **https://vercel.com** → New Project
-2. Import your forked repo: `Med12-q/VARNOX-XD-V2`
-3. Framework: **Other**
-4. Build Command: *(leave empty)*
-5. Output Directory: *(leave empty)*
-6. Click **Deploy** ✅
+### Step 2 — Deploy on Render
+1. Go to **https://render.com** → Sign in / Sign up (free)
+2. Click **New +** → **Web Service**
+3. Connect your GitHub account and select: `VARNOX-XD-V2`
+4. Fill in the settings:
+   - **Name:** `varnox-xd-v2` (or any name you like)
+   - **Region:** Choose the nearest to you
+   - **Branch:** `main`
+   - **Runtime:** `Node`
+   - **Build Command:** `npm install --legacy-peer-deps`
+   - **Start Command:** `npm start`
+   - **Instance Type:** `Free`
+5. Under **Environment Variables**, add:
+   - `OWNER_NUMBER` → your WhatsApp number without `+` (e.g. `224610835573`)
+6. Click **Create Web Service** ✅
+
+> Render will automatically detect `render.yaml` in the repo and pre-fill the settings.
 
 ### Step 3 — Get Your Pairing Link
 Your panel will be live at:
 ```
-https://varnox-xd-v2.vercel.app
+https://varnox-xd-v2.onrender.com
 ```
+*(or the custom URL Render assigns you)*
 
 Enter your WhatsApp number → Get the 8-digit pairing code → Link your bot!
 
@@ -79,7 +91,7 @@ Enter your WhatsApp number → Get the 8-digit pairing code → Link your bot!
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  1. Visit your Vercel URL                           │
+│  1. Visit your Render URL                           │
 │  2. Enter your WhatsApp number (with country code)  │
 │  3. Click "Get Pairing Code"                        │
 │  4. Open WhatsApp → Linked Devices → Link a Device  │
@@ -154,8 +166,8 @@ Enter your WhatsApp number → Get the 8-digit pairing code → Link your bot!
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `BOT_NUMBER` | Bot WhatsApp number | ✅ Yes |
-| `OWNER_NUMBER` | Owner WhatsApp number | ✅ Yes |
+| `OWNER_NUMBER` | Your WhatsApp number (no `+`) | ✅ Yes |
+| `PORT` | Auto-set by Render (default `10000`) | Auto |
 | `PREFIX` | Command prefix (default `.`) | No |
 | `BOT_NAME` | Bot display name | No |
 
@@ -165,18 +177,34 @@ Enter your WhatsApp number → Get the 8-digit pairing code → Link your bot!
 
 ```
 VARNOX-XD-V2/
-├── 📄 web.js              # Vercel entry — Express pairing server
-├── 📄 index.js            # Bot core (self-hosted)
-├── 📄 main.js             # Message handler
-├── 📄 config.js           # Bot configuration
-├── 📄 vercel.json         # Vercel deployment config
+├── 📄 web.js              # Entry point — Express pairing server
+├── 📄 index.js            # Bot core (WhatsApp connection)
+├── 📄 main.js             # Message handler & commands router
+├── 📄 config.js           # Bot configuration & API keys
+├── 📄 settings.js         # Bot settings (name, owner, etc.)
+├── 📄 render.yaml         # Render deployment config
+├── 📄 package.json        # Node.js dependencies
 ├── 📁 public/
 │   └── index.html         # Pairing panel UI
 ├── 📁 commands/           # 100+ command handlers
-├── 📁 lib/                # Core utilities
+├── 📁 lib/                # Core utilities & helpers
 ├── 📁 data/               # JSON data stores
 └── 📁 assets/             # Media assets
 ```
+
+---
+
+## 🛠️ Useful URLs (after deploy)
+
+| URL | Description |
+|-----|-------------|
+| `/` | Pairing panel |
+| `/health` | Service health check |
+| `/debug` | Full diagnostic info |
+| `/bot-logs` | Live bot logs |
+| `/botStatus` | Bot connection status |
+| `/reset` | Reset session (re-pair) |
+| `/start-bot` | Force-start bot manually |
 
 ---
 

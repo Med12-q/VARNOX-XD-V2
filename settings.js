@@ -21,14 +21,15 @@ const settings = {
   // Ton lien GitHub (optionnel)
   updateZipUrl: "https://github.com/Med12-q/VARNOX-XD-V2",
 
-  // URL du panneau — auto-détection Railway / Vercel / fallback
-  // FIX : Railway fournit RAILWAY_PUBLIC_DOMAIN ; Vercel fournit VERCEL_URL
-  pairApiUrl: process.env.RAILWAY_PUBLIC_DOMAIN
+  // URL du panneau — auto-détection Render / Railway / Vercel / fallback
+  pairApiUrl: process.env.RENDER_EXTERNAL_URL
+    ? process.env.RENDER_EXTERNAL_URL
+    : process.env.RAILWAY_PUBLIC_DOMAIN
     ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
     : process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : process.env.PANEL_URL
-    || "https://varnox-xd-v2.vercel.app",
+    || "https://varnox-xd-v2.onrender.com",
 };
 
 module.exports = settings;

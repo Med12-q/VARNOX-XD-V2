@@ -1,9 +1,0 @@
-node_modules/
-.env
-.env.local
-*.log
-.vercel
-sessions/
-baileys_store*.json
-*.session
-auth_info*/
