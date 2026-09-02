@@ -1,17 +1,14 @@
 /**
- * VARNOX XD V2 — web.js  v11
+ * VARNOX XD V2 — web.js  v12
  *
- * FIXES v11 (Baileys v7 upgrade):
- *  - @whiskeysockets/baileys → 7.0.0-rc14 (latest, replaces 6.7.x)
- *  - Removed options dropped in v7: syncFullHistory, markOnlineOnConnect,
- *    generateHighQualityLinkPreview (causes TypeError if passed)
- *
- *  FIXES v10 (pairing reliability):
+ * FIXES v12 (pairing reliability):
+ *  - Use stable Baileys 6.7.24 instead of a v7 release candidate
+ *  - Keep one active pairing attempt and ignore stale socket events
+ *  - Recover transient 515/408/502 disconnects with the same auth directory
  *  - NEVER call sock.end() before saveCreds() finishes → was losing creds.json
  *  - await saveCreds() explicitly after connection open/close
  *  - Wait 4s after saveCreds() before closing the pairing socket
  *  - Keep-alive self-ping every 14 min to prevent Render free-tier sleep
- *  - Baileys version updated in package.json (^6.7.4 → ^6.7.18)
  *  - Cold-start fallback delay increased to 8s
  *  - Cleanup timer raised to 15 min (user may be slow entering code)
  *  - Added /ping endpoint for uptime monitors (UptimeRobot etc.)
@@ -95,10 +92,42 @@ let botProcess    = null;
 let botConnected  = false;
 let _currentQR    = null;
 const activeSockets = new Map();
+let pairingGeneration = 0;
+let currentPairing = null;
 const botLogs     = [];
 const MAX_LOGS    = 300;
 let   crashCount  = 0;
 let   lastCrash   = null;
+
+function disconnectCode(error) {
+  return error?.output?.statusCode
+    ?? error?.data?.statusCode
+    ?? error?.statusCode
+    ?? error?.output?.payload?.statusCode
+    ?? null;
+}
+
+function isTransientDisconnect(code) {
+  return code === 515
+    || code === 408
+    || code === 502
+    || code === 503
+    || code === 504
+    || code === DisconnectReason.restartRequired
+    || code === DisconnectReason.connectionLost
+    || code === DisconnectReason.timedOut
+    || code === DisconnectReason.connectionClosed
+    || code === DisconnectReason.connectionReplaced;
+}
+
+function closeSocket(sock) {
+  try { sock?.ws?.close(); } catch {}
+  try { sock?.end?.(); } catch {}
+}
+
+function isCurrentPairing(attempt) {
+  return currentPairing === attempt && !attempt.cancelled;
+}
 
 function appendLog(line) {
   botLogs.push(`${new Date().toISOString()} ${line}`);
@@ -198,7 +227,7 @@ app.get('/health', (_req, res) => {
   res.json({
     status      : 'online',
     bot         : 'VARNOX XD V2',
-    version     : '11.0.0',
+    version     : '12.0.0',
     platform    : process.env.RENDER_EXTERNAL_HOSTNAME ? 'render'
                 : process.env.RAILWAY_ENVIRONMENT || 'local',
     uptime      : Math.floor(process.uptime()),
@@ -216,7 +245,7 @@ app.get('/debug', (_req, res) => {
   try { ownerData = JSON.parse(fs.readFileSync(OWNER_JSON, 'utf8')); } catch {}
   res.json({
     ok              : true,
-    version         : '11.0.0',
+    version         : '12.0.0',
     nodeVersion     : process.version,
     platform        : process.env.RENDER_EXTERNAL_HOSTNAME ? 'render'
                     : process.env.RAILWAY_ENVIRONMENT || 'local',
@@ -261,6 +290,14 @@ app.get('/botStatus', (_req, res) => {
 /* ─── /reset ──────────────────────────────────────────── */
 app.get('/reset', (_req, res) => {
   try {
+    if (currentPairing) {
+      currentPairing.cancelled = true;
+      clearTimeout(currentPairing.hardTimer);
+      clearTimeout(currentPairing.timer);
+      clearTimeout(currentPairing.recoveryTimer);
+      closeSocket(currentPairing.sock);
+      currentPairing = null;
+    }
     if (botProcess) {
       try { botProcess.kill('SIGTERM'); } catch {}
       botProcess = null; botConnected = false;
@@ -305,229 +342,290 @@ app.get('/code', async (req, res) => {
   if (number.length < 7 || number.length > 15)
     return res.json({ error: true, message: 'Invalid number (must be 7–15 digits with country code, no +)' });
 
-  /* Close any existing socket for this number */
+  if (currentPairing && !currentPairing.cancelled) {
+    if (currentPairing.code) return res.json({ error: false, code: currentPairing.code, existing: true });
+    return res.json({ error: true, message: 'A pairing attempt is already in progress. Wait for it to finish or use /reset.' });
+  }
+
   if (activeSockets.has(number)) {
     const old = activeSockets.get(number);
     clearTimeout(old.timer);
-    try { old.sock.ws?.close(); } catch {}
+    closeSocket(old.sock);
     activeSockets.delete(number);
   }
 
-  /* Clear old session — only if bot is not running */
   if (!botProcess) {
     try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch {}
   }
   fs.mkdirSync(SESSION_DIR, { recursive: true });
-
   appendLog(`[web] /code requested for ${number}`);
 
-  try {
-    /* ── Fetch latest Baileys version with fallback ── */
+  const attempt = {
+    id: ++pairingGeneration,
+    number,
+    sock: null,
+    state: null,
+    saveCreds: null,
+    code: null,
+    codeIssued: false,
+    requestInFlight: false,
+    socketStarts: 0,
+    recoveryAttempts: 0,
+    recoveryTimer: null,
+    hardTimer: null,
+    timer: null,
+    finishPromise: null,
+    finishing: false,
+    finished: false,
+    cancelled: false,
+  };
+  currentPairing = attempt;
+
+  let codeResolve, codeReject;
+  let codeDone = false;
+  const MAX_TRIES = 5;
+  const codePromise = new Promise((resolve, reject) => {
+    codeResolve = resolve;
+    codeReject = reject;
+  });
+
+  const formatCode = raw => raw?.toUpperCase().replace(/[^A-Z0-9]/g, '').match(/.{1,4}/g)?.join('-') || raw;
+  const failPairing = async (message, removeSession = true) => {
+    if (!isCurrentPairing(attempt)) return;
+    if (!codeDone) {
+      codeDone = true;
+      clearTimeout(attempt.hardTimer);
+      codeReject(new Error(message));
+    }
+    attempt.cancelled = true;
+    clearTimeout(attempt.timer);
+    clearTimeout(attempt.recoveryTimer);
+    activeSockets.delete(number);
+    currentPairing = null;
+    closeSocket(attempt.sock);
+    if (removeSession) {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch {}
+    }
+  };
+
+  const getVersion = async () => {
     let version = [2, 3000, 1023097280];
     try {
       const result = await Promise.race([
         fetchLatestBaileysVersion(),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 8000)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
       ]);
       if (result?.version) version = result.version;
       appendLog(`[web] Baileys version: ${version.join('.')}`);
     } catch (e) {
       appendLog('[web] fetchLatestBaileysVersion fallback: ' + e.message);
     }
+    return version;
+  };
 
-    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-    const logger = pino({ level: 'silent' });
-
-    const sock = makeWASocket({
-      version,
-      logger,
-      printQRInTerminal : false,
-      browser           : Browsers.ubuntu('Chrome'),
-      auth: {
-        creds : state.creds,
-        keys  : makeCacheableSignalKeyStore(state.keys, logger),
-      },
-      msgRetryCounterCache    : new NodeCache({ stdTTL: 120 }),
-      connectTimeoutMs        : 60000,
-      keepAliveIntervalMs     : 10_000,
-    });
-
-    /* ── CRITICAL: save creds on every update ── */
-    sock.ev.on('creds.update', saveCreds);
-
-    /* ── Pairing code promise ── */
-    let codeResolve, codeReject;
-    let codeDone      = false;
-    let pairStarted   = false;
-    let attempts      = 0;
-    const MAX_TRIES   = 5;
-
-    const codePromise = new Promise((res, rej) => {
-      codeResolve = res;
-      codeReject  = rej;
-    });
-
-    /* Hard timeout 45s */
-    const hardTimeout = setTimeout(() => {
-      if (!codeDone) {
-        codeDone = true;
-        codeReject(new Error('Timeout 45s — WhatsApp not responding. Try again.'));
-      }
-    }, 45000);
-
-    async function tryRequestCode() {
-      if (codeDone) return;
-      attempts++;
-      appendLog(`[web] requestPairingCode attempt ${attempts}`);
-      try {
-        if (sock.authState?.creds?.registered) {
-          if (!codeDone) {
-            codeDone = true; clearTimeout(hardTimeout);
-            codeReject(new Error(
-              'Number already registered. In WhatsApp → Linked Devices → disconnect the bot, then try again.'
-            ));
-          }
-          return;
-        }
-        const raw = await sock.requestPairingCode(number);
-        if (raw && !codeDone) {
-          codeDone = true; clearTimeout(hardTimeout);
-          appendLog(`[web] ✅ Code obtained for ${number}`);
-          codeResolve(raw);
-        } else if (!raw && !codeDone) {
-          if (attempts < MAX_TRIES) setTimeout(tryRequestCode, 3000);
-          else { codeDone = true; clearTimeout(hardTimeout); codeReject(new Error('Null code after retries. Try again.')); }
-        }
-      } catch (e) {
-        appendLog(`[web] requestPairingCode error: ${e.message}`);
-        if (codeDone) return;
-        if (attempts < MAX_TRIES) setTimeout(tryRequestCode, 3000);
-        else { codeDone = true; clearTimeout(hardTimeout); codeReject(new Error('Pairing error: ' + e.message)); }
-      }
+  const scheduleRecovery = delayMs => {
+    if (!isCurrentPairing(attempt) || attempt.finished || attempt.recoveryTimer) return;
+    if (attempt.recoveryAttempts >= 4) {
+      failPairing('WhatsApp a fermé la connexion de jumelage. Supprime les anciens appareils liés puis réessaie.', true);
+      return;
     }
-
-    /* ── Async helper: save creds then safely close socket ── */
-    async function saveAndClose(delayMs = 4000) {
+    attempt.recoveryTimer = setTimeout(async () => {
+      attempt.recoveryTimer = null;
+      attempt.recoveryAttempts++;
       try {
-        await saveCreds();           // wait for all credential files to be written
+        const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+        const logger = pino({ level: 'silent' });
+        const sock = makeWASocket({
+          version: await getVersion(),
+          logger,
+          printQRInTerminal: false,
+          browser: Browsers.ubuntu('Chrome'),
+          auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, logger),
+          },
+          msgRetryCounterCache: new NodeCache({ stdTTL: 120 }),
+          connectTimeoutMs: 60000,
+          keepAliveIntervalMs: 10000,
+        });
+        if (!isCurrentPairing(attempt)) return closeSocket(sock);
+        bindSocket(sock, state, saveCreds);
+        appendLog(`[web] pairing socket recovery ${attempt.recoveryAttempts}/4`);
+      } catch (e) {
+        appendLog(`[web] pairing recovery error: ${e.message}`);
+        scheduleRecovery(1500);
+      }
+    }, delayMs);
+  };
+
+  const tryRequestCode = async () => {
+    if (!isCurrentPairing(attempt) || codeDone || attempt.codeIssued || attempt.requestInFlight) return;
+    if (attempt.recoveryAttempts >= 4) return;
+    attempt.requestInFlight = true;
+    const current = attempt;
+    const tryNumber = (current.attempts || 0) + 1;
+    current.attempts = tryNumber;
+    appendLog(`[web] requestPairingCode attempt ${tryNumber}`);
+    try {
+      if (current.state?.creds?.registered) {
+        throw new Error('Number already registered. Disconnect it in WhatsApp → Linked Devices, then try again.');
+      }
+      const raw = await current.sock.requestPairingCode(number);
+      if (!raw || codeDone || !isCurrentPairing(current)) {
+        if (tryNumber < MAX_TRIES && isCurrentPairing(current)) setTimeout(tryRequestCode, 3000);
+        else if (!codeDone && isCurrentPairing(current)) await failPairing('No pairing code received. Try again.', true);
+        return;
+      }
+      current.code = formatCode(raw);
+      current.codeIssued = true;
+      codeDone = true;
+      clearTimeout(current.hardTimer);
+      appendLog(`[web] ✅ Code obtained for ${number}`);
+      codeResolve(raw);
+    } catch (e) {
+      appendLog(`[web] requestPairingCode error: ${e.message}`);
+      if (!isCurrentPairing(current) || codeDone) return;
+      if (tryNumber < MAX_TRIES) setTimeout(tryRequestCode, 3000);
+      else await failPairing('Pairing error: ' + e.message, true);
+    } finally {
+      current.requestInFlight = false;
+    }
+  };
+
+  const finishPairing = async sock => {
+    if (!isCurrentPairing(attempt) || attempt.finished) return;
+    if (attempt.finishPromise) return attempt.finishPromise;
+    attempt.finishing = true;
+    attempt.finishPromise = (async () => {
+      try {
+        await attempt.saveCreds();
         appendLog('[web] creds saved ✅');
       } catch (e) {
         appendLog('[web] saveCreds error: ' + e.message);
+        attempt.finishPromise = null;
+        attempt.finishing = false;
+        throw e;
       }
-      await new Promise(r => setTimeout(r, delayMs)); // extra buffer for disk writes
-      try { sock.ws?.close(); } catch {}
-    }
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      if (!isCurrentPairing(attempt) || attempt.sock !== sock) return;
+      attempt.finished = true;
+      attempt.finishing = false;
+      clearTimeout(attempt.timer);
+      activeSockets.delete(number);
+      currentPairing = null;
+      _currentQR = null;
+      initOwnerJson(number);
+      closeSocket(sock);
+      appendLog(`[web] ✅ Pairing confirmed for ${number} → starting bot`);
+      console.log(`[VARNOX] ✅ Pairing confirmed (${number})`);
+      startBot();
+    })();
+    return attempt.finishPromise;
+  };
 
-    /* ── Single connection.update handler ── */
+  const bindSocket = (sock, state, saveCreds) => {
+    attempt.sock = sock;
+    attempt.state = state;
+    attempt.saveCreds = saveCreds;
+    attempt.socketStarts++;
+    sock.ev.on('creds.update', saveCreds);
     sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+      if (!isCurrentPairing(attempt)) return;
+      if (attempt.sock !== sock) return;
       if (qr) _currentQR = qr;
 
-      /* ── connecting: trigger pairing code request ── */
-      if (connection === 'connecting' && !pairStarted) {
-        pairStarted = true;
-        appendLog('[web] connecting → requestPairingCode in 1.5s');
-        setTimeout(tryRequestCode, 1500);
+      if (connection === 'connecting') {
+        appendLog(`[web] socket ${attempt.socketStarts} connecting → pairing code in 1.5s`);
+        setTimeout(() => {
+          if (isCurrentPairing(attempt) && !attempt.codeIssued) tryRequestCode();
+        }, 1500);
       }
 
-      /* ── open: pairing succeeded ── */
       if (connection === 'open') {
-        _currentQR   = null;
-        botConnected = true;
-        appendLog(`[web] ✅ WhatsApp connected for ${number}`);
-        console.log(`[VARNOX] ✅ WhatsApp connected (${number})`);
-
-        initOwnerJson(number);
-
-        /* FIX: save creds FIRST, wait, then close socket, then start bot */
-        await saveAndClose(4000);
-
-        const entry = activeSockets.get(number);
-        if (entry) { clearTimeout(entry.timer); activeSockets.delete(number); }
-
-        startBot();
+        _currentQR = null;
+        appendLog(`[web] ✅ WhatsApp authenticated for ${number}`);
+        try {
+          await finishPairing(sock);
+        } catch (e) {
+          appendLog(`[web] activation delayed: ${e.message}`);
+          scheduleRecovery(750);
+        }
         return;
       }
 
-      /* ── close: check if pairing was registered ── */
       if (connection === 'close') {
-        const reason = lastDisconnect?.error?.output?.statusCode;
-        appendLog(`[web] connection close — reason=${reason} codeDone=${codeDone} botConnected=${botConnected}`);
+        const reason = disconnectCode(lastDisconnect?.error);
+        appendLog(`[web] connection close — reason=${reason ?? 'unknown'} codeIssued=${attempt.codeIssued}`);
+        if (attempt.finished) return;
 
-        /* Before code: only reject on loggedOut */
-        if (!codeDone) {
-          if (reason === DisconnectReason.loggedOut) {
-            codeDone = true; clearTimeout(hardTimeout);
-            codeReject(new Error('Session expired. Try again.'));
-          }
+        if (isTransientDisconnect(reason)) {
+          attempt.finishPromise = null;
+          attempt.finishing = false;
+          scheduleRecovery(750);
           return;
         }
 
-        /* After code: WhatsApp closes the pairing socket after registration — this is NORMAL.
-           Check if creds.registered was set during the close. */
-        const registered = !!sock.authState?.creds?.registered;
-        appendLog(`[web] post-code close — registered=${registered} botConnected=${botConnected}`);
-
-        if (registered && !botConnected) {
-          botConnected = true; _currentQR = null;
-          appendLog(`[web] ✅ Pairing confirmed at close for ${number} → starting bot`);
-          console.log(`[VARNOX] ✅ Pairing confirmed (${number})`);
-
-          initOwnerJson(number);
-
-          /* FIX: save creds before starting bot */
-          await saveAndClose(3000);
-
-          const entry = activeSockets.get(number);
-          if (entry) { clearTimeout(entry.timer); activeSockets.delete(number); }
-
-          startBot();
-
-        } else if (!registered && reason === DisconnectReason.loggedOut) {
-          appendLog(`[web] ❌ Pairing failed — not registered`);
-          const entry = activeSockets.get(number);
-          if (entry) { clearTimeout(entry.timer); activeSockets.delete(number); }
-          if (!botConnected) {
-            try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch {}
-          }
+        if (reason === DisconnectReason.loggedOut || reason === 401) {
+          appendLog(`[web] ❌ WhatsApp rejected the pairing for ${number}`);
+          await failPairing('WhatsApp a rejeté ce code. Supprime les anciens appareils liés puis génère un nouveau code.', true);
+          return;
         }
-        /* Other close reasons while waiting → let the 15-min timer clean up */
+
+        await failPairing(
+          attempt.codeIssued
+            ? 'La connexion WhatsApp a été fermée avant la validation. Génère un nouveau code.'
+            : 'La connexion WhatsApp a été fermée avant la génération du code.',
+          true
+        );
       }
     });
+  };
 
-    /* ── Cold-start fallback: if 'connecting' doesn't fire in 8s ── */
+  attempt.hardTimer = setTimeout(() => {
+    if (isCurrentPairing(attempt) && !codeDone)
+      failPairing('Timeout 45s — WhatsApp ne répond pas. Réessaie.', true);
+  }, 45000);
+
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+    const logger = pino({ level: 'silent' });
+    const sock = makeWASocket({
+      version: await getVersion(),
+      logger,
+      printQRInTerminal: false,
+      browser: Browsers.ubuntu('Chrome'),
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger),
+      },
+      msgRetryCounterCache: new NodeCache({ stdTTL: 120 }),
+      connectTimeoutMs: 60000,
+      keepAliveIntervalMs: 10000,
+    });
+    if (!isCurrentPairing(attempt)) {
+      closeSocket(sock);
+      throw new Error('Pairing attempt was cancelled.');
+    }
+    bindSocket(sock, state, saveCreds);
+
     setTimeout(() => {
-      if (!codeDone && !pairStarted) {
-        appendLog('[web] cold-start fallback → forcing requestPairingCode');
-        pairStarted = true;
-        tryRequestCode();
-      }
+      if (isCurrentPairing(attempt) && !attempt.codeIssued) tryRequestCode();
     }, 8000);
 
-    /* ── Wait for code ── */
-    const raw       = await codePromise;
-    const formatted = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').match(/.{1,4}/g)?.join('-') ?? raw;
-
-    /* ── 15-min cleanup timer ── */
-    const timer = setTimeout(() => {
-      if (activeSockets.has(number)) {
-        appendLog(`[web] 15-min timeout — closing socket for ${number}`);
-        try { activeSockets.get(number).sock.ws?.close(); } catch {}
-        activeSockets.delete(number);
-        if (!botConnected) {
-          try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch {}
-        }
-      }
+    const raw = await codePromise;
+    if (!isCurrentPairing(attempt)) throw new Error('Pairing attempt was cancelled.');
+    const formatted = attempt.code || formatCode(raw);
+    attempt.timer = setTimeout(() => {
+      if (isCurrentPairing(attempt) && !attempt.finished)
+        failPairing('Le code de jumelage a expiré. Génère un nouveau code.', true);
     }, 15 * 60 * 1000);
-
-    activeSockets.set(number, { sock, timer });
+    activeSockets.set(number, { sock: attempt.sock, timer: attempt.timer, attempt });
     return res.json({ error: false, code: formatted });
-
   } catch (err) {
     appendLog('[web] /code error: ' + err.message);
     console.error('[VARNOX] Pairing error:', err.message);
-    if (!botConnected) {
-      try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch {}
-    }
+    if (isCurrentPairing(attempt)) await failPairing(err.message || 'Error generating code', true);
     return res.json({ error: true, message: err.message || 'Error generating code' });
   }
 });
