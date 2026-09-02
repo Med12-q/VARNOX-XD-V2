@@ -1,0 +1,3 @@
+- [GitHub connector permissions](github-connector-permissions.md) — reading a repository can work while writes require an OAuth grant with the `repo` scope.
+- [Legacy npm dependency firewall](legacy-npm-dependency-firewall.md) — old bot media dependencies can be blocked by Replit's package security policy during installs.
+- [WhatsApp pairing reliability](pairing-reliability.md) — preserve one auth state across socket recovery and save credentials before handoff.
